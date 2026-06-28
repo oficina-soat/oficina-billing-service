@@ -1,0 +1,38 @@
+# TODO do oficina-billing-service
+
+## Próximas Tarefas
+
+- [ ] Criar domínio de Orçamento e itens financeiros.
+- [ ] Criar domínio de aprovação e recusa de orçamento.
+- [ ] Criar domínio de Pagamento e status financeiro.
+- [ ] Alinhar controllers, presenters, DTOs e validações às rotas da [OpenAPI do oficina-billing-service](../oficina-platform/contracts/openapi/oficina-billing-service.yaml).
+- [ ] Criar migrations e seed limpo para o database `oficina_billing`.
+- [ ] Implementar geração de orçamento a partir de dados da OS por consulta ou projeção local.
+- [ ] Implementar confirmação, recusa e cancelamento de pagamento.
+- [ ] Implementar Outbox para eventos financeiros.
+- [ ] Implementar publicação dos eventos financeiros.
+- [ ] Implementar consumo dos eventos de OS e Execution necessários para projeções financeiras.
+- [ ] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.
+
+## Eventos Produzidos
+
+- `orcamentoGerado`
+- `orcamentoAprovado`
+- `orcamentoRecusado`
+- `pagamentoSolicitado`
+- `pagamentoConfirmado`
+- `pagamentoRecusado`
+
+## Eventos Consumidos
+
+- `ordemDeServicoCriada`
+- `pecaIncluidaNaOrdemDeServico`
+- `servicoIncluidoNaOrdemDeServico`
+- `diagnosticoFinalizado`
+- `execucaoFinalizada`
+- `ordemDeServicoFinalizada`
+- `ordemDeServicoEntregue`
+- `estoqueAcrescentado`
+- `estoqueBaixado`
+- `sagaCompensada`
+- `sagaFinalizadaComSucesso`
