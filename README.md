@@ -43,6 +43,24 @@ docker run --rm -p 8080:8080 oficina-billing-service:local
 
 Health checks do Quarkus ficam em `/q/health`, `/q/health/live` e `/q/health/ready`.
 
+## APIs financeiras
+
+O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
+
+- `POST /api/v1/orcamentos`
+- `GET /api/v1/orcamentos/{orcamentoId}`
+- `GET /api/v1/ordens-servico/{ordemServicoId}/orcamentos`
+- `POST /api/v1/orcamentos/{orcamentoId}/aprovacao`
+- `POST /api/v1/orcamentos/{orcamentoId}/recusa`
+- `POST /api/v1/pagamentos`
+- `GET /api/v1/pagamentos/{pagamentoId}`
+- `GET /api/v1/ordens-servico/{ordemServicoId}/pagamentos`
+- `POST /api/v1/pagamentos/{pagamentoId}/confirmacao`
+- `POST /api/v1/pagamentos/{pagamentoId}/recusa`
+- `POST /api/v1/pagamentos/{pagamentoId}/cancelamento`
+
+Nesta primeira versão, os repositórios são em memória para validar domínio, controllers e transições de estado. A persistência PostgreSQL, migrations, seed, Outbox e publicação de eventos permanecem nos próximos incrementos do backlog.
+
 ## Contratos
 
 - [Contrato de APIs REST](../oficina-platform/contracts/Contrato%20de%20APIs%20REST.md)
@@ -78,4 +96,4 @@ src/main/resources/
 
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado é criar do zero o domínio financeiro a partir do [Contrato de APIs REST](../oficina-platform/contracts/Contrato%20de%20APIs%20REST.md), da [OpenAPI do oficina-billing-service](../oficina-platform/contracts/openapi/oficina-billing-service.yaml) e da [Matriz de Ownership por Microsserviço](../oficina-platform/docs/service-ownership.md).
+O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado é criar migrations e seed limpo para o database `oficina_billing`, substituindo os repositórios em memória por adapters PostgreSQL.

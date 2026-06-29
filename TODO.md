@@ -2,13 +2,13 @@
 
 ## Próximas Tarefas
 
-- [ ] Criar domínio de Orçamento e itens financeiros.
-- [ ] Criar domínio de aprovação e recusa de orçamento.
-- [ ] Criar domínio de Pagamento e status financeiro.
-- [ ] Alinhar controllers, presenters, DTOs e validações às rotas da [OpenAPI do oficina-billing-service](../oficina-platform/contracts/openapi/oficina-billing-service.yaml).
+- [x] Criar domínio de Orçamento e itens financeiros.
+- [x] Criar domínio de aprovação e recusa de orçamento.
+- [x] Criar domínio de Pagamento e status financeiro.
+- [x] Alinhar controllers, presenters, DTOs e validações às rotas da [OpenAPI do oficina-billing-service](../oficina-platform/contracts/openapi/oficina-billing-service.yaml).
 - [ ] Criar migrations e seed limpo para o database `oficina_billing`.
 - [ ] Implementar geração de orçamento a partir de dados da OS por consulta ou projeção local.
-- [ ] Implementar confirmação, recusa e cancelamento de pagamento.
+- [x] Implementar confirmação, recusa e cancelamento de pagamento.
 - [ ] Implementar Outbox para eventos financeiros.
 - [ ] Implementar publicação dos eventos financeiros.
 - [ ] Implementar consumo dos eventos de OS e Execution necessários para projeções financeiras.
