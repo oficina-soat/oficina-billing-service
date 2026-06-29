@@ -13,6 +13,8 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
+import org.eclipse.microprofile.openapi.annotations.enums.ParameterIn;
+import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -29,6 +31,7 @@ public class PagamentoResource {
 
     @POST
     @Path("/pagamentos")
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Response registrarPagamento(PagamentoCreateRequest request) {
         validar(request);
         var pagamento = pagamentoService.registrar(
@@ -55,6 +58,7 @@ public class PagamentoResource {
 
     @POST
     @Path("/pagamentos/{pagamentoId}/confirmacao")
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Pagamento confirmarPagamento(@PathParam("pagamentoId") UUID pagamentoId, ConfirmacaoPagamentoRequest request) {
         return pagamentoService.confirmar(
                 pagamentoId,
@@ -64,12 +68,14 @@ public class PagamentoResource {
 
     @POST
     @Path("/pagamentos/{pagamentoId}/recusa")
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Pagamento recusarPagamento(@PathParam("pagamentoId") UUID pagamentoId, RecusaPagamentoRequest request) {
         return pagamentoService.recusar(pagamentoId, request == null ? null : request.provedor());
     }
 
     @POST
     @Path("/pagamentos/{pagamentoId}/cancelamento")
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Pagamento cancelarPagamento(@PathParam("pagamentoId") UUID pagamentoId, CancelamentoRequest request) {
         return pagamentoService.cancelar(pagamentoId);
     }

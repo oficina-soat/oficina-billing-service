@@ -12,6 +12,8 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriBuilder;
+import org.eclipse.microprofile.openapi.annotations.enums.ParameterIn;
+import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,6 +29,7 @@ public class OrcamentoResource {
 
     @POST
     @Path("/orcamentos")
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Response gerarOrcamento(GerarOrcamentoRequest request) {
         validar(request);
         var orcamento = orcamentoService.gerar(request.ordemServicoId());
@@ -49,12 +52,14 @@ public class OrcamentoResource {
 
     @POST
     @Path("/orcamentos/{orcamentoId}/aprovacao")
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Orcamento aprovarOrcamento(@PathParam("orcamentoId") UUID orcamentoId, DecisaoOrcamentoRequest request) {
         return orcamentoService.aprovar(orcamentoId);
     }
 
     @POST
     @Path("/orcamentos/{orcamentoId}/recusa")
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Orcamento recusarOrcamento(@PathParam("orcamentoId") UUID orcamentoId, DecisaoOrcamentoRequest request) {
         return orcamentoService.recusar(orcamentoId);
     }
