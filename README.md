@@ -59,7 +59,7 @@ O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
 - `POST /api/v1/pagamentos/{pagamentoId}/recusa`
 - `POST /api/v1/pagamentos/{pagamentoId}/cancelamento`
 
-Nesta primeira versão, os repositórios são em memória para validar domínio, controllers e transições de estado. A persistência PostgreSQL, migrations, seed, Outbox e publicação de eventos permanecem nos próximos incrementos do backlog.
+Nesta primeira versão, os repositórios são em memória para validar domínio, controllers e transições de estado. As migrations e o seed limpo do PostgreSQL já existem em `src/main/resources/db/migration/`; os adapters PostgreSQL, Outbox e publicação de eventos permanecem nos próximos incrementos do backlog.
 
 ## Contratos
 
@@ -94,6 +94,17 @@ src/main/resources/
   db/migration/
 ```
 
+## Banco de dados local
+
+O profile `postgresql` executa as migrations Flyway para o database `oficina_billing`.
+
+Arquivos atuais:
+
+- `src/main/resources/db/migration/V1__create_billing_schema.sql`
+- `src/main/resources/db/migration/V2__seed_billing_data.sql`
+
+O seed usa IDs de Ordem de Serviço compatíveis com o seed do `oficina-os-service`, mas não cria foreign keys para tabelas de outro microsserviço.
+
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado é criar migrations e seed limpo para o database `oficina_billing`, substituindo os repositórios em memória por adapters PostgreSQL.
+O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado é substituir os repositórios em memória por adapters PostgreSQL e conectar Outbox/publicação de eventos.

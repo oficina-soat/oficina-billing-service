@@ -6,7 +6,7 @@
 - [x] Criar domínio de aprovação e recusa de orçamento.
 - [x] Criar domínio de Pagamento e status financeiro.
 - [x] Alinhar controllers, presenters, DTOs e validações às rotas da [OpenAPI do oficina-billing-service](../oficina-platform/contracts/openapi/oficina-billing-service.yaml).
-- [ ] Criar migrations e seed limpo para o database `oficina_billing`.
+- [x] Criar migrations e seed limpo para o database `oficina_billing`.
 - [ ] Implementar geração de orçamento a partir de dados da OS por consulta ou projeção local.
 - [x] Implementar confirmação, recusa e cancelamento de pagamento.
 - [ ] Implementar Outbox para eventos financeiros.
