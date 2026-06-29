@@ -59,7 +59,9 @@ O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
 - `POST /api/v1/pagamentos/{pagamentoId}/recusa`
 - `POST /api/v1/pagamentos/{pagamentoId}/cancelamento`
 
-Nesta primeira versão, os repositórios são em memória para validar domínio, controllers e transições de estado. As migrations e o seed limpo do PostgreSQL já existem em `src/main/resources/db/migration/`; os adapters PostgreSQL, Outbox e publicação de eventos permanecem nos próximos incrementos do backlog.
+Nesta primeira versão, os repositórios são em memória para validar domínio, controllers e transições de estado. As migrations e o seed limpo do PostgreSQL já existem em `src/main/resources/db/migration/`; os adapters PostgreSQL e a publicação real em SNS/SQS permanecem nos próximos incrementos do backlog.
+
+O serviço já mantém uma projeção financeira local alimentada por eventos, gera orçamento a partir do snapshot de peças e serviços da OS, registra eventos financeiros em Outbox e possui consumer idempotente para os eventos de Saga definidos na plataforma.
 
 ## Contratos
 
@@ -105,6 +107,19 @@ Arquivos atuais:
 
 O seed usa IDs de Ordem de Serviço compatíveis com o seed do `oficina-os-service`, mas não cria foreign keys para tabelas de outro microsserviço.
 
+## Mensageria local
+
+A base de mensageria em memória fica em `src/main/java/br/com/oficina/billing/framework/messaging/`.
+
+Ela cobre:
+
+- consumo idempotente de eventos por `eventId`;
+- projeção financeira de itens recebidos por eventos de OS e Execution;
+- geração de Outbox para `orcamentoGerado`, `orcamentoAprovado`, `orcamentoRecusado`, `pagamentoSolicitado`, `pagamentoConfirmado` e `pagamentoRecusado`;
+- publicação local de pendentes, alterando status de `PENDING` para `PUBLISHED`.
+
+A integração com SNS/SQS deve reutilizar essa fronteira de Outbox sem alterar os contratos de eventos.
+
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado é substituir os repositórios em memória por adapters PostgreSQL e conectar Outbox/publicação de eventos.
+O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado é substituir os repositórios em memória por adapters PostgreSQL e conectar a Outbox à publicação real em SNS/SQS.

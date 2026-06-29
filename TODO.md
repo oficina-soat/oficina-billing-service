@@ -7,11 +7,13 @@
 - [x] Criar domínio de Pagamento e status financeiro.
 - [x] Alinhar controllers, presenters, DTOs e validações às rotas da [OpenAPI do oficina-billing-service](../oficina-platform/contracts/openapi/oficina-billing-service.yaml).
 - [x] Criar migrations e seed limpo para o database `oficina_billing`.
-- [ ] Implementar geração de orçamento a partir de dados da OS por consulta ou projeção local.
+- [x] Implementar geração de orçamento a partir de dados da OS por consulta ou projeção local.
 - [x] Implementar confirmação, recusa e cancelamento de pagamento.
-- [ ] Implementar Outbox para eventos financeiros.
-- [ ] Implementar publicação dos eventos financeiros.
-- [ ] Implementar consumo dos eventos de OS e Execution necessários para projeções financeiras.
+- [x] Implementar Outbox para eventos financeiros.
+- [x] Implementar publicação dos eventos financeiros.
+- [x] Implementar consumo dos eventos de OS e Execution necessários para projeções financeiras.
+- [ ] Substituir repositórios em memória por adapters PostgreSQL.
+- [ ] Conectar a Outbox à publicação real em SNS/SQS.
 - [ ] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.
 
 ## Eventos Produzidos

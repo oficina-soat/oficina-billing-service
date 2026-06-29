@@ -70,7 +70,10 @@ public class PagamentoResource {
     @Path("/pagamentos/{pagamentoId}/recusa")
     @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Pagamento recusarPagamento(@PathParam("pagamentoId") UUID pagamentoId, RecusaPagamentoRequest request) {
-        return pagamentoService.recusar(pagamentoId, request == null ? null : request.provedor());
+        return pagamentoService.recusar(
+                pagamentoId,
+                request == null ? null : request.provedor(),
+                request == null ? null : request.motivo());
     }
 
     @POST

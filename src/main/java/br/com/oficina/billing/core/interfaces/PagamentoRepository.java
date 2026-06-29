@@ -11,4 +11,6 @@ public interface PagamentoRepository {
     Optional<Pagamento> findById(UUID pagamentoId);
 
     List<Pagamento> findByOrdemServicoId(UUID ordemServicoId);
+
+    Optional<Pagamento> findByOrcamentoId(UUID orcamentoId);
 }

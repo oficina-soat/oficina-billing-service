@@ -7,10 +7,13 @@ import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
 import br.com.oficina.billing.core.interfaces.PagamentoRepository;
+import br.com.oficina.billing.framework.messaging.BillingEventStore;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,11 +21,13 @@ import java.util.UUID;
 public class PagamentoService {
     private final PagamentoRepository repository;
     private final OrcamentoService orcamentoService;
+    private final BillingEventStore eventStore;
     private final Clock clock;
 
-    public PagamentoService(PagamentoRepository repository, OrcamentoService orcamentoService) {
+    public PagamentoService(PagamentoRepository repository, OrcamentoService orcamentoService, BillingEventStore eventStore) {
         this.repository = repository;
         this.orcamentoService = orcamentoService;
+        this.eventStore = eventStore;
         this.clock = Clock.systemUTC();
     }
 
@@ -50,7 +55,9 @@ public class PagamentoService {
                 null,
                 now,
                 now);
-        return repository.save(pagamento);
+        var salvo = repository.save(pagamento);
+        registrarEvento(salvo, "pagamentoSolicitado", "oficina.billing.pagamento-solicitado", "solicitadoEm", now, null, null);
+        return salvo;
     }
 
     public Pagamento consultar(UUID pagamentoId) {
@@ -65,19 +72,39 @@ public class PagamentoService {
     public Pagamento confirmar(UUID pagamentoId, String provedor, String transacaoExternaId) {
         var pagamento = consultar(pagamentoId);
         validarCriado(pagamento, "Somente pagamentos criados podem ser confirmados.");
-        return atualizarStatus(pagamento, StatusPagamento.CONFIRMADO, provedor, transacaoExternaId);
+        var atualizado = atualizarStatus(pagamento, StatusPagamento.CONFIRMADO, provedor, transacaoExternaId);
+        registrarEvento(atualizado, "pagamentoConfirmado", "oficina.billing.pagamento-confirmado", "confirmadoEm", atualizado.atualizadoEm(), null, null);
+        return atualizado;
     }
 
-    public Pagamento recusar(UUID pagamentoId, String provedor) {
+    public Pagamento recusar(UUID pagamentoId, String provedor, String motivo) {
         var pagamento = consultar(pagamentoId);
         validarCriado(pagamento, "Somente pagamentos criados podem ser recusados.");
-        return atualizarStatus(pagamento, StatusPagamento.RECUSADO, provedor, pagamento.transacaoExternaId());
+        var atualizado = atualizarStatus(pagamento, StatusPagamento.RECUSADO, provedor, pagamento.transacaoExternaId());
+        registrarEvento(atualizado, "pagamentoRecusado", "oficina.billing.pagamento-recusado", "recusadoEm", atualizado.atualizadoEm(), provedor, motivo);
+        return atualizado;
     }
 
     public Pagamento cancelar(UUID pagamentoId) {
         var pagamento = consultar(pagamentoId);
         validarCriado(pagamento, "Somente pagamentos criados podem ser cancelados.");
         return atualizarStatus(pagamento, StatusPagamento.CANCELADO, pagamento.provedor(), pagamento.transacaoExternaId());
+    }
+
+    public Pagamento solicitarPagamentoDaOrdem(UUID ordemServicoId) {
+        var orcamento = orcamentoService.consultarPorOrdemServico(ordemServicoId).stream()
+                .filter(item -> item.status() == StatusOrcamento.APROVADO)
+                .max(Comparator.comparing(orcamentoAprovado -> orcamentoAprovado.atualizadoEm()))
+                .orElseThrow(() -> new ResourceNotFoundException("Orcamento aprovado nao encontrado para a ordem de servico."));
+        return repository.findByOrcamentoId(orcamento.orcamentoId())
+                .orElseGet(() -> registrar(ordemServicoId, orcamento.orcamentoId(), orcamento.valorTotal(), MetodoPagamento.PIX));
+    }
+
+    public List<Pagamento> cancelarPagamentosCriadosDaOrdem(UUID ordemServicoId) {
+        return repository.findByOrdemServicoId(ordemServicoId).stream()
+                .filter(pagamento -> pagamento.status() == StatusPagamento.CRIADO)
+                .map(pagamento -> atualizarStatus(pagamento, StatusPagamento.CANCELADO, pagamento.provedor(), pagamento.transacaoExternaId()))
+                .toList();
     }
 
     private void validarCriado(Pagamento pagamento, String message) {
@@ -99,5 +126,36 @@ public class PagamentoService {
                 pagamento.criadoEm(),
                 OffsetDateTime.now(clock));
         return repository.save(atualizado);
+    }
+
+    private void registrarEvento(
+            Pagamento pagamento,
+            String eventType,
+            String topic,
+            String timestampField,
+            OffsetDateTime ocorridoEm,
+            String provedor,
+            String motivo) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("pagamentoId", pagamento.pagamentoId().toString());
+        payload.put("ordemServicoId", pagamento.ordemServicoId().toString());
+        payload.put("orcamentoId", pagamento.orcamentoId().toString());
+        payload.put("valor", pagamento.valor());
+        if ("pagamentoSolicitado".equals(eventType)) {
+            payload.put("metodo", pagamento.metodo().name());
+        }
+        payload.put("status", pagamento.status().name());
+        var provedorEvento = provedor == null ? pagamento.provedor() : provedor;
+        if (provedorEvento != null && !provedorEvento.isBlank()) {
+            payload.put("provedor", provedorEvento);
+        }
+        if (pagamento.transacaoExternaId() != null && !pagamento.transacaoExternaId().isBlank()) {
+            payload.put("transacaoExternaId", pagamento.transacaoExternaId());
+        }
+        if (motivo != null && !motivo.isBlank()) {
+            payload.put("motivo", motivo);
+        }
+        payload.put(timestampField, ocorridoEm.toString());
+        eventStore.registrarOutbox(pagamento.pagamentoId().toString(), eventType, topic, payload, null, ocorridoEm);
     }
 }

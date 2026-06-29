@@ -54,14 +54,14 @@ public class OrcamentoResource {
     @Path("/orcamentos/{orcamentoId}/aprovacao")
     @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Orcamento aprovarOrcamento(@PathParam("orcamentoId") UUID orcamentoId, DecisaoOrcamentoRequest request) {
-        return orcamentoService.aprovar(orcamentoId);
+        return orcamentoService.aprovar(orcamentoId, request == null ? null : request.motivo());
     }
 
     @POST
     @Path("/orcamentos/{orcamentoId}/recusa")
     @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
     public Orcamento recusarOrcamento(@PathParam("orcamentoId") UUID orcamentoId, DecisaoOrcamentoRequest request) {
-        return orcamentoService.recusar(orcamentoId);
+        return orcamentoService.recusar(orcamentoId, request == null ? null : request.motivo());
     }
 
     private void validar(GerarOrcamentoRequest request) {

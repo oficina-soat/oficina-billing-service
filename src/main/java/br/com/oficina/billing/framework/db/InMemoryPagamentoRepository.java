@@ -31,4 +31,11 @@ public class InMemoryPagamentoRepository implements PagamentoRepository {
                 .sorted(Comparator.comparing(Pagamento::criadoEm))
                 .toList();
     }
+
+    @Override
+    public Optional<Pagamento> findByOrcamentoId(UUID orcamentoId) {
+        return storage.values().stream()
+                .filter(pagamento -> pagamento.orcamentoId().equals(orcamentoId))
+                .findFirst();
+    }
 }
