@@ -34,14 +34,64 @@ class StatusResourceTest {
     }
 
     @Test
+    void shouldAcceptCanonicalIdempotencyKeyForMutatingRequests() {
+        given()
+                .header("X-Idempotency-Key", "status-canonical-001")
+                .when()
+                .post("/api/v1/status")
+                .then()
+                .statusCode(200)
+                .body("service", equalTo("oficina-billing-service"))
+                .body("environment", equalTo("lab"))
+                .body("status", equalTo("UP"));
+    }
+
+    @Test
+    void shouldAcceptLegacyIdempotencyKeyForMutatingRequests() {
+        given()
+                .header("Idempotency-Key", "status-legacy-001")
+                .when()
+                .post("/api/v1/status")
+                .then()
+                .statusCode(200)
+                .body("service", equalTo("oficina-billing-service"))
+                .body("environment", equalTo("lab"))
+                .body("status", equalTo("UP"));
+    }
+
+    @Test
     void shouldRequireIdempotencyKeyForMutatingRequests() {
         given()
                 .when()
                 .post("/api/v1/status")
                 .then()
                 .statusCode(400)
+                .body("timestamp", notNullValue())
                 .body("status", equalTo(400))
-                .body("errorCode", equalTo("HTTP_400"))
-                .body("correlationId", notNullValue());
+                .body("error", equalTo("Bad Request"))
+                .body("code", equalTo("IDEMPOTENCY_KEY_REQUIRED"))
+                .body("message", equalTo("Header X-Idempotency-Key obrigatorio para operacoes mutaveis."))
+                .body("path", equalTo("/api/v1/status"))
+                .body("correlationId", notNullValue())
+                .body("service", equalTo("oficina-billing-service"))
+                .body("details.size()", equalTo(0));
+    }
+
+    @Test
+    void shouldReturnContractedErrorForUnknownApi() {
+        given()
+                .when()
+                .get("/api/v1/status-inexistente")
+                .then()
+                .statusCode(404)
+                .body("timestamp", notNullValue())
+                .body("status", equalTo(404))
+                .body("error", equalTo("Not Found"))
+                .body("code", equalTo("RESOURCE_NOT_FOUND"))
+                .body("message", notNullValue())
+                .body("path", equalTo("/api/v1/status-inexistente"))
+                .body("correlationId", notNullValue())
+                .body("service", equalTo("oficina-billing-service"))
+                .body("details.size()", equalTo(0));
     }
 }
