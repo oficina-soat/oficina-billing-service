@@ -15,7 +15,7 @@
 - [x] Implementar integração opcional de pagamento PIX com Mercado Pago.
 - [ ] Substituir repositórios em memória por adapters PostgreSQL.
 - [ ] Conectar a Outbox à publicação real em SNS/SQS.
-- [ ] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.
+- [x] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.
 
 ## Eventos Produzidos
 
