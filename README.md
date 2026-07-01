@@ -30,6 +30,19 @@ O serviço não é dono de Cliente, Veículo, Ordem de Serviço, catálogo técn
 ./mvnw package -Ppostgresql
 ```
 
+## Cobertura
+
+O JaCoCo é executado no `verify`, gera relatório em `target/jacoco-report/` e falha o build quando a cobertura de instruções do bundle fica abaixo de 80%. O [Template GitHub Actions para Microsserviços](../oficina-platform/templates/github-actions/README.md) publica esse diretório como artifact `jacoco-report-oficina-billing-service`.
+
+Evidência local de cobertura em 2026-07-01:
+
+```text
+./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false
+instruction=84.55% branch=59.91% line=86.36% complexity=60.47%
+Tests run: 29, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
 ## Docker
 
 ```bash
@@ -138,4 +151,4 @@ A integração com SNS/SQS deve reutilizar essa fronteira de Outbox sem alterar 
 
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado é substituir os repositórios em memória por adapters PostgreSQL e conectar a Outbox à publicação real em SNS/SQS.
+O backlog local está em [TODO.md](TODO.md). O próximo incremento esperado no Épico B2 é validar contratos OpenAPI, schemas JSON de eventos, erro padronizado, idempotência e Saga. Em paralelo, seguem no backlog técnico a substituição dos repositórios em memória por adapters PostgreSQL e a conexão da Outbox à publicação real em SNS/SQS.

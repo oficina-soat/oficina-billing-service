@@ -16,6 +16,8 @@
 - [ ] Substituir repositórios em memória por adapters PostgreSQL.
 - [ ] Conectar a Outbox à publicação real em SNS/SQS.
 - [x] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.
+- [x] Configurar cobertura mínima de 80% com JaCoCo e evidência no README/CI, conforme [Padrão BDD, Cobertura e Qualidade](../oficina-platform/docs/bdd-testing.md).
+- [ ] Validar contratos OpenAPI, schemas JSON de eventos, erro padronizado, idempotência e Saga.
 
 ## Eventos Produzidos
 
