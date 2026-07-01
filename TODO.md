@@ -12,6 +12,7 @@
 - [x] Implementar Outbox para eventos financeiros.
 - [x] Implementar publicação dos eventos financeiros.
 - [x] Implementar consumo dos eventos de OS e Execution necessários para projeções financeiras.
+- [x] Implementar integração opcional de pagamento PIX com Mercado Pago.
 - [ ] Substituir repositórios em memória por adapters PostgreSQL.
 - [ ] Conectar a Outbox à publicação real em SNS/SQS.
 - [ ] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.

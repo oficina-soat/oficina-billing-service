@@ -24,6 +24,8 @@ public class BusinessExceptionMapper implements ExceptionMapper<BusinessExceptio
         int status = switch (exception.code()) {
             case "VALIDATION_ERROR" -> Response.Status.BAD_REQUEST.getStatusCode();
             case "BUSINESS_RULE_VIOLATION" -> 422;
+            case "DEPENDENCY_UNAVAILABLE" -> Response.Status.SERVICE_UNAVAILABLE.getStatusCode();
+            case "DEPENDENCY_FAILURE" -> Response.Status.BAD_GATEWAY.getStatusCode();
             default -> Response.Status.CONFLICT.getStatusCode();
         };
         var body = errorResponseFactory.create(status, exception.code(), exception.getMessage(), uriInfo);

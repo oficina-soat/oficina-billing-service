@@ -6,9 +6,12 @@ import br.com.oficina.billing.core.entities.StatusOrcamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
+import br.com.oficina.billing.core.interfaces.PagamentoGateway;
+import br.com.oficina.billing.core.interfaces.PagamentoGatewayResult;
 import br.com.oficina.billing.core.interfaces.PagamentoRepository;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -22,13 +25,24 @@ public class PagamentoService {
     private final PagamentoRepository repository;
     private final OrcamentoService orcamentoService;
     private final BillingEventStore eventStore;
+    private final PagamentoGateway pagamentoGateway;
     private final Clock clock;
 
-    public PagamentoService(PagamentoRepository repository, OrcamentoService orcamentoService, BillingEventStore eventStore) {
+    @Inject
+    public PagamentoService(
+            PagamentoRepository repository,
+            OrcamentoService orcamentoService,
+            BillingEventStore eventStore,
+            PagamentoGateway pagamentoGateway) {
         this.repository = repository;
         this.orcamentoService = orcamentoService;
         this.eventStore = eventStore;
+        this.pagamentoGateway = pagamentoGateway;
         this.clock = Clock.systemUTC();
+    }
+
+    public PagamentoService(PagamentoRepository repository, OrcamentoService orcamentoService, BillingEventStore eventStore) {
+        this(repository, orcamentoService, eventStore, ignored -> PagamentoGatewayResult.naoIntegrado());
     }
 
     public Pagamento registrar(UUID ordemServicoId, UUID orcamentoId, BigDecimal valor, MetodoPagamento metodo) {
@@ -55,9 +69,10 @@ public class PagamentoService {
                 null,
                 now,
                 now);
+        var resultadoGateway = pagamentoGateway.solicitar(pagamento);
         var salvo = repository.save(pagamento);
         registrarEvento(salvo, "pagamentoSolicitado", "oficina.billing.pagamento-solicitado", "solicitadoEm", now, null, null);
-        return salvo;
+        return aplicarResultadoGateway(salvo, resultadoGateway);
     }
 
     public Pagamento consultar(UUID pagamentoId) {
@@ -126,6 +141,38 @@ public class PagamentoService {
                 pagamento.criadoEm(),
                 OffsetDateTime.now(clock));
         return repository.save(atualizado);
+    }
+
+    private Pagamento aplicarResultadoGateway(Pagamento pagamento, PagamentoGatewayResult resultado) {
+        if (resultado == null || !resultado.integrado()) {
+            return pagamento;
+        }
+
+        var atualizado = atualizarStatus(
+                pagamento,
+                resultado.status(),
+                resultado.provedor(),
+                resultado.transacaoExternaId());
+        if (resultado.status() == StatusPagamento.CONFIRMADO) {
+            registrarEvento(
+                    atualizado,
+                    "pagamentoConfirmado",
+                    "oficina.billing.pagamento-confirmado",
+                    "confirmadoEm",
+                    atualizado.atualizadoEm(),
+                    resultado.provedor(),
+                    null);
+        } else if (resultado.status() == StatusPagamento.RECUSADO) {
+            registrarEvento(
+                    atualizado,
+                    "pagamentoRecusado",
+                    "oficina.billing.pagamento-recusado",
+                    "recusadoEm",
+                    atualizado.atualizadoEm(),
+                    resultado.provedor(),
+                    resultado.motivo());
+        }
+        return atualizado;
     }
 
     private void registrarEvento(

@@ -63,6 +63,18 @@ Nesta primeira versão, os repositórios são em memória para validar domínio,
 
 O serviço já mantém uma projeção financeira local alimentada por eventos, gera orçamento a partir do snapshot de peças e serviços da OS, registra eventos financeiros em Outbox e possui consumer idempotente para os eventos de Saga definidos na plataforma.
 
+## Integração Mercado Pago
+
+A integração com Mercado Pago é opcional em ambiente local e fica desabilitada por padrão. Quando `OFICINA_MERCADO_PAGO_ENABLED=true`, o registro de pagamento PIX em `POST /api/v1/pagamentos` cria uma cobrança no endpoint `/v1/payments` do Mercado Pago usando `Authorization: Bearer` e `X-Idempotency-Key` com o `pagamentoId`.
+
+Mapeamento de status do provedor:
+
+- `approved`: pagamento local `CONFIRMADO` e evento `pagamentoConfirmado`;
+- `rejected`, `cancelled`, `refunded` ou `charged_back`: pagamento local `RECUSADO` e evento `pagamentoRecusado`;
+- demais estados, como `pending` e `in_process`: pagamento local permanece `CRIADO` com `provedor=mercado-pago` e `transacaoExternaId`.
+
+Na Fase 4, a chamada direta ao Mercado Pago cobre PIX. Cartão exige tokenização/dados de captura fora do contrato REST atual e deve permanecer para incremento posterior ou fluxo operacional manual.
+
 ## Contratos
 
 - [Contrato de APIs REST](../oficina-platform/contracts/Contrato%20de%20APIs%20REST.md)
@@ -82,6 +94,10 @@ O serviço já mantém uma projeção financeira local alimentada por eventos, g
 - `OFICINA_AUTH_ISSUER`
 - `OFICINA_AUTH_AUDIENCE`
 - `MP_JWT_VERIFY_PUBLICKEY_LOCATION`
+- `OFICINA_MERCADO_PAGO_ENABLED`
+- `OFICINA_MERCADO_PAGO_ACCESS_TOKEN`
+- `OFICINA_MERCADO_PAGO_PAYER_EMAIL`
+- `OFICINA_MERCADO_PAGO_API_URL`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 - `DEPLOYMENT_ENVIRONMENT`
 
