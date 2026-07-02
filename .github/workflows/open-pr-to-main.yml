@@ -14,7 +14,7 @@ env:
 
 jobs:
   validate:
-    name: validate
+    name: develop-validate
     runs-on: ubuntu-latest
     permissions:
       contents: read

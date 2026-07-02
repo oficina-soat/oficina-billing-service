@@ -47,7 +47,7 @@ BUILD SUCCESS
 
 Os workflows ficam em [.github/workflows/service-ci.yml](.github/workflows/service-ci.yml) e [.github/workflows/open-pr-to-main.yml](.github/workflows/open-pr-to-main.yml), derivados do [Template GitHub Actions para Microsserviços](../oficina-platform/templates/github-actions/README.md).
 
-Pull requests e pushes na `main` executam `./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false`, validam a cobertura mínima de 80%, executam o Quality Gate SonarCloud e publicam o artifact `jacoco-report-oficina-billing-service`.
+Pull requests e pushes na `main` executam o check `service-ci-validate` com `./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false`, validam a cobertura mínima de 80%, executam o Quality Gate SonarCloud e publicam o artifact `jacoco-report-oficina-billing-service`.
 
 A publicação de imagem e o deploy Kubernetes são condicionais:
 
