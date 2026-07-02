@@ -15,6 +15,14 @@ Este repositório segue a governança definida em [../oficina-platform](../ofici
 
 O serviço não é dono de Cliente, Veículo, Ordem de Serviço, catálogo técnico, estoque, diagnóstico ou execução.
 
+## Saga orquestrada
+
+A plataforma usa **Saga orquestrada** pelo `oficina-os-service`, conforme a [ADR-009 - Estratégia de Saga Pattern](../oficina-platform/adr/ADR-009%20-%20Estratégia%20de%20Saga%20Pattern.md), os [Fluxos da Saga da Ordem de Serviço](../oficina-platform/docs/saga-flows.md) e o [Contrato de Saga do oficina-os-service](../oficina-platform/contracts/saga/oficina-os-saga-v1.md).
+
+O `oficina-os-service` foi escolhido como orquestrador porque é a autoridade sobre o estado global da Ordem de Serviço e concentra a sequência distribuída do processo. Essa escolha mantém o fluxo explícito, melhora a rastreabilidade e evita que compensações fiquem dispersas entre os serviços participantes.
+
+O `oficina-billing-service` participa da Saga como autoridade financeira. Ele gera orçamento, registra aprovação ou recusa, solicita pagamento e publica os eventos financeiros consumidos pelo orquestrador. O serviço não decide sozinho o estado global da OS; ele preserva seu banco e domínio financeiro enquanto responde a comandos idempotentes e eventos definidos nos contratos da plataforma.
+
 ## Stack
 
 - Java 25
@@ -181,4 +189,4 @@ A integração com SNS/SQS deve reutilizar essa fronteira de Outbox sem alterar 
 
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main` e documentar a justificativa da Saga orquestrada pelo `oficina-os-service`. Em paralelo, seguem no backlog técnico a substituição dos repositórios em memória por adapters PostgreSQL e a conexão da Outbox à publicação real em SNS/SQS.
+O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main` e resolver a estratégia de entrega dos manifestos Kubernetes por microsserviço. Em paralelo, seguem no backlog técnico a substituição dos repositórios em memória por adapters PostgreSQL e a conexão da Outbox à publicação real em SNS/SQS.
