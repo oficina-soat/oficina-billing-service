@@ -63,7 +63,7 @@ A publicação de imagem e o deploy Kubernetes são condicionais:
 - `ENABLE_K8S_DEPLOY=true` habilita atualização do Deployment no EKS;
 - em `workflow_dispatch`, os inputs `publish_image` e `deploy` permitem acionar esses estágios manualmente.
 
-Enquanto a estratégia de manifestos Kubernetes por microsserviço estiver aberta na plataforma, mantenha `ENABLE_K8S_DEPLOY=false` e use o job de validação como checagem obrigatória de branch.
+Enquanto os manifests executáveis não estiverem materializados no `oficina-infra`, mantenha `ENABLE_K8S_DEPLOY=false` e use o job de validação como checagem obrigatória de branch.
 
 ## Validação de contratos
 
@@ -75,6 +75,14 @@ O teste [PlatformContractsTest](src/test/java/br/com/oficina/billing/contracts/P
 docker build --build-arg MAVEN_PROFILE=postgresql -t oficina-billing-service:local .
 docker run --rm -p 8080:8080 oficina-billing-service:local
 ```
+
+## Kubernetes
+
+A estratégia de entrega dos manifests está definida em [Estratégia de entrega dos manifestos Kubernetes](../oficina-platform/docs/kubernetes-manifest-strategy.md).
+
+Este repositório mantém o Dockerfile do serviço e não mantém cópia executável dos manifests Kubernetes para evitar divergência. A referência normativa do serviço fica em [Template Kubernetes do oficina-billing-service](../oficina-platform/templates/kubernetes/base/oficina-billing-service/), e o destino canônico de deploy é `../oficina-infra/k8s/base/microservices/oficina-billing-service/`.
+
+O deploy automatizado só deve ser habilitado com `ENABLE_K8S_DEPLOY=true` depois que o Deployment `oficina-billing-service` estiver materializado no `oficina-infra` e renderizado pelo overlay `../oficina-infra/k8s/overlays/lab/`.
 
 ## Endpoint técnico
 
@@ -189,4 +197,4 @@ A integração com SNS/SQS deve reutilizar essa fronteira de Outbox sem alterar 
 
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main` e resolver a estratégia de entrega dos manifestos Kubernetes por microsserviço. Em paralelo, seguem no backlog técnico a substituição dos repositórios em memória por adapters PostgreSQL e a conexão da Outbox à publicação real em SNS/SQS.
+O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main` e manter a documentação local atualizada conforme novos manifests, variáveis e evidências forem materializados. Em paralelo, seguem no backlog técnico a substituição dos repositórios em memória por adapters PostgreSQL e a conexão da Outbox à publicação real em SNS/SQS.
