@@ -17,7 +17,8 @@
 - [ ] Conectar a Outbox à publicação real em SNS/SQS.
 - [x] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.
 - [x] Configurar cobertura mínima de 80% com JaCoCo e evidência no README/CI, conforme [Padrão BDD, Cobertura e Qualidade](../oficina-platform/docs/bdd-testing.md).
-- [ ] Validar contratos OpenAPI, schemas JSON de eventos, erro padronizado, idempotência e Saga.
+- [x] Validar contratos OpenAPI, schemas JSON de eventos, erro padronizado, idempotência e Saga.
+- [ ] Copiar e adaptar workflows de CI/CD, garantindo build, testes, Quality Gate, publicação de imagem e deploy automatizado.
 
 ## Eventos Produzidos
 
