@@ -31,12 +31,39 @@ O `oficina-billing-service` participa da Saga como autoridade financeira. Ele ge
 - Flyway para migrations
 - JWT, OpenAPI, Health, métricas Prometheus, logs JSON e OpenTelemetry
 
+## Setup local
+
+Pré-requisitos:
+
+- Java 25;
+- Docker, para build de imagem e dependências locais;
+- acesso ao repositório `../oficina-platform`, usado pelos testes de contrato;
+- acesso opcional ao repositório `../oficina-infra`, usado para subir dependências compartilhadas da suíte.
+
+Dependências locais compartilhadas podem ser iniciadas pelo `oficina-infra`:
+
+```bash
+cd ../oficina-infra
+docker compose -f compose.local.yml up -d postgres dynamodb localstack
+scripts/local/bootstrap-local.sh
+```
+
+Volte para este repositório antes de executar o serviço:
+
+```bash
+cd ../oficina-billing-service
+```
+
 ## Execução local
 
 ```bash
+./mvnw quarkus:dev -Ppostgresql
 ./mvnw test -Ppostgresql
-./mvnw package -Ppostgresql
+./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false
+./mvnw -B package -Ppostgresql
 ```
+
+O comando `verify` executa testes unitários, integração, contrato e verificação de cobertura JaCoCo.
 
 ## Cobertura
 
@@ -159,6 +186,8 @@ Na Fase 4, a chamada direta ao Mercado Pago cobre PIX. Cartão exige tokenizaç�
 - `OFICINA_MERCADO_PAGO_API_URL`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
 - `DEPLOYMENT_ENVIRONMENT`
+
+Em ambiente local, valores de desenvolvimento ficam em `src/main/resources/application.properties`. Em Kubernetes, variáveis de banco vêm do secret `oficina-billing-service-database-env`, e variáveis não sensíveis vêm do ConfigMap definido pelo manifest canônico no `oficina-infra`.
 
 ## Estrutura
 
