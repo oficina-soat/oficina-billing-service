@@ -74,6 +74,18 @@ docker run --rm -p 8080:8080 oficina-billing-service:local
 
 Health checks do Quarkus ficam em `/q/health`, `/q/health/live` e `/q/health/ready`.
 
+## Swagger/OpenAPI
+
+O contrato canônico do serviço é a [OpenAPI do oficina-billing-service](../oficina-platform/contracts/openapi/oficina-billing-service.yaml), mantida no repositório de plataforma.
+
+Com o serviço em execução local na porta `8080`, a documentação gerada pelo Quarkus fica disponível em:
+
+- Swagger UI: `http://localhost:8080/q/swagger-ui/`;
+- OpenAPI YAML: `http://localhost:8080/q/openapi`;
+- OpenAPI JSON: `http://localhost:8080/q/openapi?format=json`.
+
+O teste [PlatformContractsTest](src/test/java/br/com/oficina/billing/contracts/PlatformContractsTest.java) valida que a OpenAPI gerada em runtime mantém os caminhos e métodos definidos no contrato canônico.
+
 ## APIs financeiras
 
 O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
@@ -169,4 +181,4 @@ A integração com SNS/SQS deve reutilizar essa fronteira de Outbox sem alterar 
 
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main`, registrar Swagger/OpenAPI no README e documentar a justificativa da Saga orquestrada pelo `oficina-os-service`. Em paralelo, seguem no backlog técnico a substituição dos repositórios em memória por adapters PostgreSQL e a conexão da Outbox à publicação real em SNS/SQS.
+O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main` e documentar a justificativa da Saga orquestrada pelo `oficina-os-service`. Em paralelo, seguem no backlog técnico a substituição dos repositórios em memória por adapters PostgreSQL e a conexão da Outbox à publicação real em SNS/SQS.
