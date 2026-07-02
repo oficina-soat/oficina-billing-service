@@ -1,0 +1,578 @@
+name: Service CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      publish_image:
+        description: Publicar imagem no ECR mesmo com ENABLE_IMAGE_PUBLISH desabilitado.
+        required: false
+        type: boolean
+        default: false
+      deploy:
+        description: Atualizar o Deployment no EKS mesmo com ENABLE_K8S_DEPLOY desabilitado.
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: lab-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  validate:
+    name: validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      MAVEN_PROFILE: ${{ vars.MAVEN_PROFILE }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Resolve service configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          service_name="${SERVICE_NAME:-${GITHUB_REPOSITORY##*/}}"
+
+          case "${service_name}" in
+            oficina-os-service|oficina-billing-service)
+              maven_profile="${MAVEN_PROFILE:-postgresql}"
+              ;;
+            oficina-execution-service)
+              maven_profile="${MAVEN_PROFILE:-dynamodb}"
+              ;;
+            *)
+              echo "Servico nao canonico: ${service_name}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "SERVICE_NAME=${service_name}" >>"${GITHUB_ENV}"
+          echo "MAVEN_PROFILE=${maven_profile}" >>"${GITHUB_ENV}"
+
+      - name: Ensure mvnw is executable
+        run: chmod +x ./mvnw
+
+      - name: Run Maven verification
+        run: ./mvnw -B verify -P"${MAVEN_PROFILE}" -DskipITs=false -DfailIfNoTests=false
+
+      - name: Run SonarCloud quality gate
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          required_vars=(
+            SONAR_TOKEN
+            SONAR_ORGANIZATION
+            SONAR_PROJECT_KEY
+          )
+
+          for name in "${required_vars[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Configuracao obrigatoria ausente para SonarCloud: ${name}" >&2
+              exit 1
+            fi
+          done
+
+          ./mvnw -B sonar:sonar \
+            -Dsonar.organization="${SONAR_ORGANIZATION}" \
+            -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token="${SONAR_TOKEN}" \
+            -Dsonar.qualitygate.wait=true
+
+      - name: Upload coverage report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: jacoco-report-${{ env.SERVICE_NAME }}
+          path: target/jacoco-report/
+          if-no-files-found: ignore
+
+  resolve_service_state:
+    if: >
+      github.ref_name == 'main' &&
+      (
+        vars.ENABLE_IMAGE_PUBLISH == 'true' ||
+        vars.ENABLE_K8S_DEPLOY == 'true' ||
+        github.event.inputs.publish_image == 'true' ||
+        github.event.inputs.deploy == 'true'
+      )
+    name: resolve-service-state
+    runs-on: ubuntu-latest
+    needs: validate
+    permissions:
+      contents: read
+    environment:
+      name: lab
+    outputs:
+      commit_sha: ${{ steps.state.outputs.commit_sha }}
+      current_deployment_image: ${{ steps.state.outputs.current_deployment_image }}
+      current_version: ${{ steps.state.outputs.current_version }}
+      deploy_enabled: ${{ steps.state.outputs.deploy_enabled }}
+      deployment_exists: ${{ steps.state.outputs.deployment_exists }}
+      image_exists: ${{ steps.state.outputs.image_exists }}
+      image_ref: ${{ steps.state.outputs.image_ref }}
+      image_tag: ${{ steps.state.outputs.image_tag }}
+      need_build: ${{ steps.state.outputs.need_build }}
+      need_deploy: ${{ steps.state.outputs.need_deploy }}
+      need_release: ${{ steps.state.outputs.need_release }}
+      publish_enabled: ${{ steps.state.outputs.publish_enabled }}
+      publish_relevant_change: ${{ steps.state.outputs.publish_relevant_change }}
+      release_exists: ${{ steps.state.outputs.release_exists }}
+      release_tag: ${{ steps.state.outputs.release_tag }}
+      repository_name: ${{ steps.state.outputs.repository_name }}
+      repository_url: ${{ steps.state.outputs.repository_url }}
+      service_name: ${{ steps.state.outputs.service_name }}
+      version_changed: ${{ steps.state.outputs.version_changed }}
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      ECR_REPOSITORY_NAME: ${{ vars.ECR_REPOSITORY_NAME }}
+      ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
+      ENABLE_IMAGE_PUBLISH: ${{ vars.ENABLE_IMAGE_PUBLISH || 'false' }}
+      ENABLE_K8S_DEPLOY: ${{ vars.ENABLE_K8S_DEPLOY || 'false' }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'eks-lab' }}
+      K8S_CONTAINER_NAME: ${{ vars.K8S_CONTAINER_NAME }}
+      K8S_DEPLOYMENT_NAME: ${{ vars.K8S_DEPLOYMENT_NAME }}
+      K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE || 'default' }}
+      MANUAL_DEPLOY: ${{ github.event.inputs.deploy || 'false' }}
+      MANUAL_PUBLISH_IMAGE: ${{ github.event.inputs.publish_image || 'false' }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Resolve AWS publish and deploy state
+        id: state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          set_output() {
+            printf '%s=%s\n' "$1" "$2" >> "${GITHUB_OUTPUT}"
+          }
+
+          extract_version() {
+            sed -n '0,/<version>[[:space:]]*/{
+              s/.*<version>[[:space:]]*\([^<][^<]*\)[[:space:]]*<\/version>.*/\1/p
+            }' "$1" | head -n 1
+          }
+
+          is_publish_relevant_path() {
+            local path="$1"
+
+            case "${path}" in
+              .github/*|README.md|docs/*)
+                return 1
+                ;;
+              *)
+                return 0
+                ;;
+            esac
+          }
+
+          image_tag_exists() {
+            local error_file
+            error_file="$(mktemp)"
+
+            if aws --region "${AWS_REGION}" ecr describe-images \
+              --repository-name "${repository_name}" \
+              --image-ids imageTag="${image_tag}" >/dev/null 2>"${error_file}"; then
+              rm -f "${error_file}"
+              return 0
+            fi
+
+            if grep -q 'ImageNotFoundException' "${error_file}"; then
+              rm -f "${error_file}"
+              return 1
+            fi
+
+            cat "${error_file}" >&2
+            rm -f "${error_file}"
+            exit 1
+          }
+
+          service_name="${SERVICE_NAME:-${GITHUB_REPOSITORY##*/}}"
+          case "${service_name}" in
+            oficina-os-service|oficina-billing-service|oficina-execution-service)
+              ;;
+            *)
+              echo "Servico nao canonico: ${service_name}" >&2
+              exit 1
+              ;;
+          esac
+
+          publish_enabled=false
+          if [[ "${ENABLE_IMAGE_PUBLISH}" == "true" || "${MANUAL_PUBLISH_IMAGE}" == "true" || "${MANUAL_DEPLOY}" == "true" ]]; then
+            publish_enabled=true
+          fi
+
+          deploy_enabled=false
+          if [[ "${ENABLE_K8S_DEPLOY}" == "true" || "${MANUAL_DEPLOY}" == "true" ]]; then
+            deploy_enabled=true
+          fi
+
+          current_version="$(extract_version pom.xml)"
+          if [[ -z "${current_version}" ]]; then
+            echo "Nao foi possivel identificar project.version em pom.xml" >&2
+            exit 1
+          fi
+
+          if [[ "${current_version}" == *-SNAPSHOT ]]; then
+            echo "A versao fechada do servico em main nao pode ser SNAPSHOT: ${current_version}" >&2
+            exit 1
+          fi
+
+          version_changed=false
+          publish_relevant_change=false
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            if git show "${{ github.event.before }}:pom.xml" > /tmp/base-pom.xml 2>/dev/null; then
+              base_version="$(extract_version /tmp/base-pom.xml)"
+              if [[ -n "${base_version}" && "${current_version}" != "${base_version}" ]]; then
+                version_changed=true
+              fi
+            else
+              version_changed=true
+            fi
+
+            while IFS= read -r changed_path; do
+              if is_publish_relevant_path "${changed_path}"; then
+                publish_relevant_change=true
+                break
+              fi
+            done < <(git diff --name-only "${{ github.event.before }}" "${GITHUB_SHA}")
+          elif [[ "${{ github.event_name }}" == "push" ]]; then
+            version_changed=true
+            publish_relevant_change=true
+          fi
+
+          repository_name="${ECR_REPOSITORY_NAME:-${service_name}}"
+          if [[ -n "${ECR_REPOSITORY_URL}" ]]; then
+            repository_url="${ECR_REPOSITORY_URL}"
+          else
+            repository_url="$(
+              aws --region "${AWS_REGION}" ecr describe-repositories \
+                --repository-names "${repository_name}" \
+                --query 'repositories[0].repositoryUri' \
+                --output text
+            )"
+          fi
+
+          image_tag="${current_version}"
+          image_ref="${repository_url}:${image_tag}"
+          release_tag="v${current_version}"
+          deployment_name="${K8S_DEPLOYMENT_NAME:-${service_name}}"
+          container_name="${K8S_CONTAINER_NAME:-${service_name}}"
+
+          release_exists=false
+          if gh release view "${release_tag}" >/dev/null 2>&1; then
+            release_exists=true
+          fi
+
+          image_exists=false
+          if image_tag_exists; then
+            image_exists=true
+          fi
+
+          deployment_exists=false
+          current_deployment_image=""
+          if [[ "${deploy_enabled}" == true ]]; then
+            aws --region "${AWS_REGION}" eks describe-cluster --name "${EKS_CLUSTER_NAME}" >/dev/null
+            aws eks update-kubeconfig --region "${AWS_REGION}" --name "${EKS_CLUSTER_NAME}"
+
+            if kubectl get deployment "${deployment_name}" --namespace "${K8S_NAMESPACE}" >/dev/null 2>&1; then
+              deployment_exists=true
+              current_deployment_image="$(
+                kubectl get deployment "${deployment_name}" \
+                  --namespace "${K8S_NAMESPACE}" \
+                  -o jsonpath="{.spec.template.spec.containers[?(@.name=='${container_name}')].image}"
+              )"
+            fi
+          fi
+
+          need_build=false
+          need_release=false
+          need_deploy=false
+
+          if [[ "${publish_enabled}" == true && "${image_exists}" == false ]]; then
+            need_build=true
+          fi
+
+          if [[ "${publish_enabled}" == true && "${release_exists}" == false ]]; then
+            need_release=true
+          fi
+
+          if [[ "${deploy_enabled}" == true && ( "${deployment_exists}" == false || "${current_deployment_image}" != "${image_ref}" ) ]]; then
+            need_deploy=true
+          fi
+
+          if [[ "${{ github.event_name }}" == "push" &&
+                "${publish_relevant_change}" == true &&
+                "${version_changed}" == false &&
+                ( "${need_build}" == true || "${need_release}" == true ) ]]; then
+            printf '%s\n\n%s\n%s\n%s\n\n%s\n' \
+              "Push em main exige nova publicacao, mas project.version nao mudou." \
+              "Versao atual: ${current_version}" \
+              "Release existe: ${release_exists}" \
+              "Imagem existe no ECR: ${image_exists}" \
+              "Incremente project.version em pom.xml antes de publicar novo build, release ou imagem." >&2
+            exit 1
+          fi
+
+          commit_sha="$(git rev-parse HEAD)"
+
+          set_output commit_sha "${commit_sha}"
+          set_output current_deployment_image "${current_deployment_image}"
+          set_output current_version "${current_version}"
+          set_output deploy_enabled "${deploy_enabled}"
+          set_output deployment_exists "${deployment_exists}"
+          set_output image_exists "${image_exists}"
+          set_output image_ref "${image_ref}"
+          set_output image_tag "${image_tag}"
+          set_output need_build "${need_build}"
+          set_output need_deploy "${need_deploy}"
+          set_output need_release "${need_release}"
+          set_output publish_enabled "${publish_enabled}"
+          set_output publish_relevant_change "${publish_relevant_change}"
+          set_output release_exists "${release_exists}"
+          set_output release_tag "${release_tag}"
+          set_output repository_name "${repository_name}"
+          set_output repository_url "${repository_url}"
+          set_output service_name "${service_name}"
+          set_output version_changed "${version_changed}"
+
+  publish_artifacts:
+    if: github.ref_name == 'main'
+    name: publish-artifacts
+    runs-on: ubuntu-latest
+    needs: resolve_service_state
+    permissions:
+      contents: write
+    environment:
+      name: lab
+    env:
+      APP_VERSION: ${{ needs.resolve_service_state.outputs.current_version }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      IMAGE_REF: ${{ needs.resolve_service_state.outputs.image_ref }}
+      MAVEN_PROFILE: ${{ vars.MAVEN_PROFILE }}
+      PUSH_LATEST_IMAGE: ${{ vars.PUSH_LATEST_IMAGE || 'false' }}
+      RELEASE_TAG: ${{ needs.resolve_service_state.outputs.release_tag }}
+      SERVICE_NAME: ${{ needs.resolve_service_state.outputs.service_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve_service_state.outputs.commit_sha }}
+
+      - name: Configure AWS credentials
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_build == 'true'
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Build Docker image
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_build == 'true'
+        shell: bash
+        run: |
+          case "${SERVICE_NAME}" in
+            oficina-os-service|oficina-billing-service)
+              maven_profile="${MAVEN_PROFILE:-postgresql}"
+              ;;
+            oficina-execution-service)
+              maven_profile="${MAVEN_PROFILE:-dynamodb}"
+              ;;
+            *)
+              echo "Servico nao canonico: ${SERVICE_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
+          docker build \
+            --build-arg MAVEN_PROFILE="${maven_profile}" \
+            -t "${IMAGE_REF}" \
+            .
+
+      - name: Push Docker image
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_build == 'true'
+        shell: bash
+        run: |
+          registry="${IMAGE_REF%%/*}"
+          aws --region "${AWS_REGION}" ecr get-login-password \
+            | docker login --username AWS --password-stdin "${registry}"
+          docker push "${IMAGE_REF}"
+
+      - name: Optionally publish latest tag
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_build == 'true' && env.PUSH_LATEST_IMAGE == 'true'
+        shell: bash
+        run: |
+          latest_ref="${{ needs.resolve_service_state.outputs.repository_url }}:latest"
+          docker tag "${IMAGE_REF}" "${latest_ref}"
+          docker push "${latest_ref}"
+
+      - name: Prepare image metadata
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_release == 'true'
+        shell: bash
+        run: |
+          mkdir -p target
+          {
+            echo "artifact=${SERVICE_NAME}"
+            echo "version=${APP_VERSION}"
+            echo "release=${RELEASE_TAG}"
+            echo "image=${IMAGE_REF}"
+            echo "repository=${{ needs.resolve_service_state.outputs.repository_url }}"
+            echo "tag=${{ needs.resolve_service_state.outputs.image_tag }}"
+            echo "commit=${{ needs.resolve_service_state.outputs.commit_sha }}"
+          } > "target/${SERVICE_NAME}-image.txt"
+
+      - name: Create GitHub release
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_release == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} ja existe; seguindo de forma idempotente."
+            exit 0
+          fi
+
+          gh release create "${RELEASE_TAG}" \
+            "target/${SERVICE_NAME}-image.txt" \
+            --target "${{ needs.resolve_service_state.outputs.commit_sha }}" \
+            --title "${RELEASE_TAG}" \
+            --notes "Imagem ${SERVICE_NAME} ${APP_VERSION}: ${IMAGE_REF}"
+
+      - name: Upload image metadata
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_release == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ env.SERVICE_NAME }}-image
+          path: target/${{ env.SERVICE_NAME }}-image.txt
+          if-no-files-found: error
+
+      - name: Report no-op publish state
+        if: needs.resolve_service_state.outputs.publish_enabled == 'true' && needs.resolve_service_state.outputs.need_build != 'true' && needs.resolve_service_state.outputs.need_release != 'true'
+        run: echo "Nenhum build, push de imagem ou release necessario para ${APP_VERSION}."
+
+      - name: Report disabled publish state
+        if: needs.resolve_service_state.outputs.publish_enabled != 'true'
+        run: echo "Publicacao de imagem desabilitada; use ENABLE_IMAGE_PUBLISH=true ou workflow_dispatch com publish_image=true."
+
+  deploy_service:
+    if: github.ref_name == 'main' && needs.resolve_service_state.outputs.deploy_enabled == 'true' && needs.resolve_service_state.outputs.need_deploy == 'true'
+    name: deploy-service
+    runs-on: ubuntu-latest
+    needs:
+      - resolve_service_state
+      - publish_artifacts
+    permissions:
+      contents: read
+    environment:
+      name: lab
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'eks-lab' }}
+      IMAGE_REF: ${{ needs.resolve_service_state.outputs.image_ref }}
+      K8S_CONTAINER_NAME: ${{ vars.K8S_CONTAINER_NAME }}
+      K8S_DEPLOYMENT_NAME: ${{ vars.K8S_DEPLOYMENT_NAME }}
+      K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE || 'default' }}
+      K8S_ROLLOUT_TIMEOUT: ${{ vars.K8S_ROLLOUT_TIMEOUT || '300s' }}
+      SERVICE_NAME: ${{ needs.resolve_service_state.outputs.service_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.resolve_service_state.outputs.commit_sha }}
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v5
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Deploy service image to EKS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          deployment_name="${K8S_DEPLOYMENT_NAME:-${SERVICE_NAME}}"
+          container_name="${K8S_CONTAINER_NAME:-${SERVICE_NAME}}"
+
+          aws eks update-kubeconfig \
+            --region "${AWS_REGION}" \
+            --name "${EKS_CLUSTER_NAME}"
+
+          kubectl -n "${K8S_NAMESPACE}" set image \
+            "deployment/${deployment_name}" \
+            "${container_name}=${IMAGE_REF}"
+
+          kubectl -n "${K8S_NAMESPACE}" rollout status \
+            "deployment/${deployment_name}" \
+            --timeout="${K8S_ROLLOUT_TIMEOUT}"
+
+  report_noop:
+    if: >
+      github.ref_name == 'main' &&
+      needs.resolve_service_state.outputs.publish_enabled == 'true' &&
+      needs.resolve_service_state.outputs.deploy_enabled == 'true' &&
+      needs.resolve_service_state.outputs.need_build != 'true' &&
+      needs.resolve_service_state.outputs.need_release != 'true' &&
+      needs.resolve_service_state.outputs.need_deploy != 'true'
+    name: report-noop
+    runs-on: ubuntu-latest
+    needs:
+      - resolve_service_state
+      - publish_artifacts
+    steps:
+      - name: Report no-op
+        run: |
+          echo "Versao ${{ needs.resolve_service_state.outputs.current_version }} ja possui release, imagem no ECR e deployment alinhado no EKS."
