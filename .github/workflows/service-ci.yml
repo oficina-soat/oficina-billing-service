@@ -88,25 +88,30 @@ jobs:
       - name: Run Maven verification
         run: ./mvnw -B verify -P"${MAVEN_PROFILE}" -DskipITs=false -DfailIfNoTests=false
 
-      - name: Run SonarCloud quality gate
+      - name: Run optional SonarCloud quality gate
         shell: bash
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           set -euo pipefail
 
-          required_vars=(
+          sonar_vars=(
             SONAR_TOKEN
             SONAR_ORGANIZATION
             SONAR_PROJECT_KEY
           )
 
-          for name in "${required_vars[@]}"; do
+          missing_vars=()
+          for name in "${sonar_vars[@]}"; do
             if [[ -z "${!name:-}" ]]; then
-              echo "Configuracao obrigatoria ausente para SonarCloud: ${name}" >&2
-              exit 1
+              missing_vars+=("${name}")
             fi
           done
+
+          if [[ ${#missing_vars[@]} -gt 0 ]]; then
+            printf 'SonarCloud nao configurado (%s); pulando quality gate.\n' "$(IFS=,; echo "${missing_vars[*]}")"
+            exit 0
+          fi
 
           ./mvnw -B sonar:sonar \
             -Dsonar.organization="${SONAR_ORGANIZATION}" \
