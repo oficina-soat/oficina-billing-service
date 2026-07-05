@@ -45,6 +45,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Checkout platform contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf ../oficina-platform
+          git clone --depth 1 --branch main https://github.com/oficina-soat/oficina-platform.git ../oficina-platform
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
