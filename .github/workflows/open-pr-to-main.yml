@@ -138,11 +138,6 @@ jobs:
             exit 1
           fi
 
-          if [[ "${current_version}" == *-SNAPSHOT ]]; then
-            echo "Nao vou abrir PR para main com versao SNAPSHOT: ${current_version}" >&2
-            exit 1
-          fi
-
           title="Atualizar ${BASE_BRANCH} com ${HEAD_BRANCH} - ${service_name} v${current_version}"
           body="$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s\n' \
             "PR automatico preparado pelo workflow Open PR To Main apos a validacao dos testes." \
@@ -150,7 +145,7 @@ jobs:
             "- Branch origem: ${HEAD_BRANCH}" \
             "- Branch destino: ${BASE_BRANCH}" \
             "- Commit validado: ${GITHUB_SHA}" \
-            "Ao aceitar este PR, o push resultante em ${BASE_BRANCH} vai executar a validacao obrigatoria e so vai publicar imagem ou fazer deploy quando ENABLE_IMAGE_PUBLISH, ENABLE_K8S_DEPLOY ou os inputs manuais correspondentes estiverem habilitados.")"
+            "Ao aceitar este PR, o push resultante em ${BASE_BRANCH} vai executar a validacao obrigatoria e so vai publicar imagem ou fazer deploy quando ENABLE_IMAGE_PUBLISH, ENABLE_K8S_DEPLOY ou os inputs manuais correspondentes estiverem habilitados. Versoes SNAPSHOT sao bloqueadas no workflow de publicacao/deploy, nao na preparacao automatica do PR.")"
 
           existing_pr_number="$(find_existing_pr_number)"
 
