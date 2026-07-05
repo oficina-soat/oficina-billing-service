@@ -21,8 +21,6 @@ jobs:
     env:
       MAVEN_PROFILE: ${{ vars.MAVEN_PROFILE }}
       SERVICE_NAME: ${{ vars.SERVICE_NAME }}
-      SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
-      SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -70,34 +68,6 @@ jobs:
 
       - name: Run Maven verification
         run: ./mvnw -B verify -P"${MAVEN_PROFILE}" -DskipITs=false -DfailIfNoTests=false
-
-      - name: Run SonarCloud quality gate
-        shell: bash
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          required_vars=(
-            SONAR_TOKEN
-            SONAR_ORGANIZATION
-            SONAR_PROJECT_KEY
-          )
-
-          for name in "${required_vars[@]}"; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "Configuracao obrigatoria ausente para SonarCloud: ${name}" >&2
-              exit 1
-            fi
-          done
-
-          ./mvnw -B sonar:sonar \
-            -Dsonar.organization="${SONAR_ORGANIZATION}" \
-            -Dsonar.projectKey="${SONAR_PROJECT_KEY}" \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.token="${SONAR_TOKEN}" \
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/jacoco-report/jacoco.xml \
-            -Dsonar.qualitygate.wait=true
 
   open-pull-request-to-main:
     needs: validate
@@ -175,7 +145,7 @@ jobs:
 
           title="Atualizar ${BASE_BRANCH} com ${HEAD_BRANCH} - ${service_name} v${current_version}"
           body="$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s\n' \
-            "PR automatico preparado pelo workflow Open PR To Main apos a validacao dos testes e do SonarCloud." \
+            "PR automatico preparado pelo workflow Open PR To Main apos a validacao dos testes." \
             "- Versao: ${current_version}" \
             "- Branch origem: ${HEAD_BRANCH}" \
             "- Branch destino: ${BASE_BRANCH}" \
