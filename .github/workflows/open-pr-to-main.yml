@@ -1,0 +1,194 @@
+name: Open PR To Main
+
+on:
+  push:
+    branches:
+      - develop
+
+concurrency:
+  group: open-pr-to-main-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  validate:
+    name: develop-validate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      MAVEN_PROFILE: ${{ vars.MAVEN_PROFILE }}
+      SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Checkout platform contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf ../oficina-platform
+          git clone --depth 1 --branch main https://github.com/oficina-soat/oficina-platform.git ../oficina-platform
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Resolve service configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          service_name="${SERVICE_NAME:-${GITHUB_REPOSITORY##*/}}"
+          case "${service_name}" in
+            oficina-os-service|oficina-billing-service)
+              maven_profile="${MAVEN_PROFILE:-postgresql}"
+              ;;
+            oficina-execution-service)
+              maven_profile="${MAVEN_PROFILE:-dynamodb}"
+              ;;
+            *)
+              echo "Servico nao canonico: ${service_name}" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "SERVICE_NAME=${service_name}" >>"${GITHUB_ENV}"
+          echo "MAVEN_PROFILE=${maven_profile}" >>"${GITHUB_ENV}"
+
+      - name: Ensure mvnw is executable
+        run: chmod +x ./mvnw
+
+      - name: Run Maven verification
+        run: ./mvnw -B verify -P"${MAVEN_PROFILE}" -DskipITs=false -DfailIfNoTests=false
+
+  open-pull-request-to-main:
+    needs: validate
+    name: open-pull-request-to-main
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Open or update pull request to main
+        shell: bash
+        env:
+          BASE_BRANCH: main
+          GH_TOKEN: ${{ github.token }}
+          HEAD_BRANCH: ${{ github.ref_name }}
+          SERVICE_NAME: ${{ vars.SERVICE_NAME }}
+        run: |
+          set -euo pipefail
+
+          extract_version() {
+            sed -n '0,/<version>[[:space:]]*/{
+              s/.*<version>[[:space:]]*\([^<][^<]*\)[[:space:]]*<\/version>.*/\1/p
+            }' "$1" | head -n 1
+          }
+
+          find_existing_pr_number() {
+            local candidate_head=""
+            local pr_number=""
+
+            for candidate_head in "${GITHUB_REPOSITORY_OWNER}:${HEAD_BRANCH}" "${HEAD_BRANCH}"; do
+              pr_number="$(
+                gh pr list \
+                  --repo "${GITHUB_REPOSITORY}" \
+                  --base "${BASE_BRANCH}" \
+                  --head "${candidate_head}" \
+                  --state open \
+                  --json number \
+                  --jq '.[0].number // empty'
+              )"
+
+              if [[ -n "${pr_number}" ]]; then
+                printf '%s\n' "${pr_number}"
+                return
+              fi
+            done
+          }
+
+          service_name="${SERVICE_NAME:-${GITHUB_REPOSITORY##*/}}"
+
+          git fetch origin "${BASE_BRANCH}" "${HEAD_BRANCH}"
+          head_ref="${GITHUB_REPOSITORY_OWNER}:${HEAD_BRANCH}"
+
+          if git merge-base "origin/${BASE_BRANCH}" "origin/${HEAD_BRANCH}" >/dev/null 2>&1; then
+            if git diff --quiet "origin/${BASE_BRANCH}...origin/${HEAD_BRANCH}" -- .; then
+              echo "Branch ${HEAD_BRANCH} nao possui diferencas de conteudo em relacao a ${BASE_BRANCH}; PR nao sera criado."
+              exit 0
+            fi
+          else
+            echo "Branches ${BASE_BRANCH} e ${HEAD_BRANCH} ainda nao possuem merge base; seguindo para a verificacao de PR existente."
+          fi
+
+          current_version="$(extract_version pom.xml)"
+          if [[ -z "${current_version}" ]]; then
+            echo "Nao foi possivel identificar project.version em pom.xml" >&2
+            exit 1
+          fi
+
+          title="Atualizar ${BASE_BRANCH} com ${HEAD_BRANCH} - ${service_name} v${current_version}"
+          body="$(printf '%s\n\n%s\n%s\n%s\n%s\n\n%s\n' \
+            "PR automatico preparado pelo workflow Open PR To Main apos a validacao dos testes." \
+            "- Versao: ${current_version}" \
+            "- Branch origem: ${HEAD_BRANCH}" \
+            "- Branch destino: ${BASE_BRANCH}" \
+            "- Commit validado: ${GITHUB_SHA}" \
+            "Ao aceitar este PR, o push resultante em ${BASE_BRANCH} vai executar a validacao obrigatoria e so vai publicar imagem ou fazer deploy quando ENABLE_IMAGE_PUBLISH, ENABLE_K8S_DEPLOY ou os inputs manuais correspondentes estiverem habilitados. Versoes SNAPSHOT sao bloqueadas no workflow de publicacao/deploy, nao na preparacao automatica do PR.")"
+
+          existing_pr_number="$(find_existing_pr_number)"
+
+          if [[ -n "${existing_pr_number}" ]]; then
+            gh pr edit "${existing_pr_number}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${title}" \
+              --body "${body}"
+            exit 0
+          fi
+
+          set +e
+          create_output="$(
+            gh pr create \
+              --repo "${GITHUB_REPOSITORY}" \
+              --base "${BASE_BRANCH}" \
+              --head "${head_ref}" \
+              --title "${title}" \
+              --body "${body}" \
+              2>&1
+          )"
+          create_status=$?
+          set -e
+
+          if [[ ${create_status} -eq 0 ]]; then
+            echo "${create_output}"
+            exit 0
+          fi
+
+          existing_pr_number="$(find_existing_pr_number)"
+
+          if [[ -n "${existing_pr_number}" ]]; then
+            gh pr edit "${existing_pr_number}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "${title}" \
+              --body "${body}"
+            exit 0
+          fi
+
+          if grep -q "A pull request already exists" <<<"${create_output}"; then
+            echo "Pull request ja existente para ${HEAD_BRANCH} -> ${BASE_BRANCH}."
+            exit 0
+          fi
+
+          echo "${create_output}" >&2
+          exit "${create_status}"
