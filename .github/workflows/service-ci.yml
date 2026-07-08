@@ -143,8 +143,6 @@ jobs:
     needs: validate
     permissions:
       contents: read
-    environment:
-      name: lab
     outputs:
       commit_sha: ${{ steps.state.outputs.commit_sha }}
       current_deployment_image: ${{ steps.state.outputs.current_deployment_image }}
@@ -403,8 +401,6 @@ jobs:
     needs: resolve_service_state
     permissions:
       contents: write
-    environment:
-      name: lab
     env:
       APP_VERSION: ${{ needs.resolve_service_state.outputs.current_version }}
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
@@ -524,8 +520,6 @@ jobs:
       - publish_artifacts
     permissions:
       contents: read
-    environment:
-      name: lab
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'eks-lab' }}
