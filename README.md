@@ -40,6 +40,8 @@ Pré-requisitos:
 - acesso ao repositório `../oficina-platform`, usado pelos testes de contrato;
 - acesso opcional ao repositório `../oficina-infra`, usado para subir dependências compartilhadas da suíte.
 
+Ferramentas locais recomendadas para validação de CI/CD, Dockerfile e scripts estão em [Ferramentas de validação local](../oficina-platform/docs/validation-tooling.md).
+
 Dependências locais compartilhadas podem ser iniciadas pelo `oficina-infra`:
 
 ```bash
