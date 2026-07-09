@@ -10,12 +10,12 @@ on:
   workflow_dispatch:
     inputs:
       publish_image:
-        description: Publicar imagem no ECR mesmo com ENABLE_IMAGE_PUBLISH desabilitado.
+        description: Publicar imagem no ECR mesmo se ENABLE_IMAGE_PUBLISH=false.
         required: false
         type: boolean
         default: false
       deploy:
-        description: Materializar ou atualizar o Deployment no EKS mesmo com ENABLE_K8S_DEPLOY desabilitado.
+        description: Materializar ou atualizar o Deployment no EKS mesmo se ENABLE_K8S_DEPLOY=false.
         required: false
         type: boolean
         default: false
@@ -98,8 +98,8 @@ jobs:
     if: >
       github.ref_name == 'main' &&
       (
-        vars.ENABLE_IMAGE_PUBLISH == 'true' ||
-        vars.ENABLE_K8S_DEPLOY == 'true' ||
+        vars.ENABLE_IMAGE_PUBLISH != 'false' ||
+        vars.ENABLE_K8S_DEPLOY != 'false' ||
         github.event.inputs.publish_image == 'true' ||
         github.event.inputs.deploy == 'true'
       )
@@ -132,8 +132,8 @@ jobs:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
       ECR_REPOSITORY_NAME: ${{ vars.ECR_REPOSITORY_NAME }}
       ECR_REPOSITORY_URL: ${{ vars.ECR_REPOSITORY_URL }}
-      ENABLE_IMAGE_PUBLISH: ${{ vars.ENABLE_IMAGE_PUBLISH || 'false' }}
-      ENABLE_K8S_DEPLOY: ${{ vars.ENABLE_K8S_DEPLOY || 'false' }}
+      ENABLE_IMAGE_PUBLISH: ${{ vars.ENABLE_IMAGE_PUBLISH || 'true' }}
+      ENABLE_K8S_DEPLOY: ${{ vars.ENABLE_K8S_DEPLOY || 'true' }}
       EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'eks-lab' }}
       K8S_CONTAINER_NAME: ${{ vars.K8S_CONTAINER_NAME }}
       K8S_DEPLOYMENT_NAME: ${{ vars.K8S_DEPLOYMENT_NAME }}
@@ -474,7 +474,7 @@ jobs:
 
       - name: Report disabled publish state
         if: needs.resolve_service_state.outputs.publish_enabled != 'true'
-        run: echo "Publicacao de imagem desabilitada; use ENABLE_IMAGE_PUBLISH=true ou workflow_dispatch com publish_image=true."
+        run: echo "Publicacao de imagem desabilitada por ENABLE_IMAGE_PUBLISH=false; use workflow_dispatch com publish_image=true para forcar."
 
   deploy_service:
     if: github.ref_name == 'main' && needs.resolve_service_state.outputs.deploy_enabled == 'true' && needs.resolve_service_state.outputs.need_deploy == 'true'
