@@ -87,12 +87,12 @@ Pull requests e pushes na `main` executam o check `service-ci-validate` com `./m
 A publicação de imagem e o deploy Kubernetes são condicionais:
 
 - `ENABLE_IMAGE_PUBLISH=true` habilita consulta ao ECR, build/push da imagem Docker e release com metadados da imagem;
-- `ENABLE_K8S_DEPLOY=true` habilita atualização do Deployment no EKS;
+- `ENABLE_K8S_DEPLOY=true` habilita publicação quando necessário, materialização ou atualização do Deployment no EKS e validação do rollout;
 - em `workflow_dispatch`, os inputs `publish_image` e `deploy` permitem acionar esses estágios manualmente.
 
 O workflow não usa GitHub Environment para evitar aprovação manual nos jobs. As variáveis e secrets de AWS/ECR/EKS devem estar em nível de repositório ou organização, e o controle manual do fluxo acontece no merge do PR aberto automaticamente a partir da branch `develop`.
 
-O primeiro Deployment deve ser materializado pelo `oficina-infra`, que mantém os manifests executáveis em `../oficina-infra/k8s/base/microservices/oficina-billing-service/` e aplica o serviço quando encontra imagem publicada no ECR. Se `ENABLE_K8S_DEPLOY=true` for ligado antes de existir o Deployment `oficina-billing-service` no cluster, o workflow reporta a pré-condição ausente e falha em vez de terminar como sucesso sem executar rollout.
+Quando `ENABLE_K8S_DEPLOY=true`, o workflow do serviço faz checkout do `oficina-infra`, aplica o manifest canônico em `../oficina-infra/k8s/base/microservices/oficina-billing-service/` com a imagem publicada pelo próprio workflow, aguarda o rollout no EKS e confere se o container ficou com a imagem esperada. Após recriar a infraestrutura base do lab, não é necessário executar um segundo `Deploy Lab` apenas para materializar este serviço.
 
 ## Validação de contratos
 
@@ -111,7 +111,7 @@ A estratégia de entrega dos manifests está definida em [Estratégia de entrega
 
 Este repositório mantém o Dockerfile do serviço e não mantém cópia executável dos manifests Kubernetes para evitar divergência. A referência normativa do serviço fica em [Template Kubernetes do oficina-billing-service](../oficina-platform/templates/kubernetes/base/oficina-billing-service/), e o destino canônico de deploy é `../oficina-infra/k8s/base/microservices/oficina-billing-service/`.
 
-Depois que o Deployment `oficina-billing-service` estiver materializado pelo `oficina-infra`, o deploy automatizado com `ENABLE_K8S_DEPLOY=true` atualiza a imagem do container e valida o rollout no EKS.
+O deploy automatizado com `ENABLE_K8S_DEPLOY=true` materializa o Deployment quando ele ainda não existe, atualiza a imagem quando ele já existe e valida o rollout no EKS usando o script canônico `scripts/manual/apply-microservices.sh` do `oficina-infra`.
 
 ## Endpoint técnico
 
