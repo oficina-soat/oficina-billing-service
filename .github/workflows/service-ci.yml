@@ -541,8 +541,10 @@ jobs:
     steps:
       - name: Report missing Kubernetes deployment
         run: |
-          echo "Deploy Kubernetes habilitado, mas o Deployment ${{ needs.resolve_service_state.outputs.service_name }} nao existe no cluster."
-          echo "A imagem e a release podem ser publicadas; o rollout sera pulado ate o manifest executavel existir no oficina-infra."
+          echo "::error::Deploy Kubernetes habilitado, mas o Deployment ${{ needs.resolve_service_state.outputs.service_name }} nao existe no cluster."
+          echo "Garanta que a imagem do servico exista no ECR e execute o workflow Deploy Lab do oficina-infra para materializar o manifest inicial."
+          echo "Depois que o Deployment existir, reexecute este workflow para atualizar a imagem e validar o rollout."
+          exit 1
 
   report_noop:
     if: >

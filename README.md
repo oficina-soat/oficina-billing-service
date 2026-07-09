@@ -92,7 +92,7 @@ A publicação de imagem e o deploy Kubernetes são condicionais:
 
 O workflow não usa GitHub Environment para evitar aprovação manual nos jobs. As variáveis e secrets de AWS/ECR/EKS devem estar em nível de repositório ou organização, e o controle manual do fluxo acontece no merge do PR aberto automaticamente a partir da branch `develop`.
 
-Enquanto os manifests executáveis não estiverem materializados no `oficina-infra`, mantenha `ENABLE_K8S_DEPLOY=false` e use o job de validação como checagem obrigatória de branch. Se `ENABLE_K8S_DEPLOY=true` for ligado antes de existir o Deployment `oficina-billing-service` no cluster, o workflow reporta a pré-condição ausente e pula o rollout em vez de executar `kubectl set image` contra um recurso inexistente.
+O primeiro Deployment deve ser materializado pelo `oficina-infra`, que mantém os manifests executáveis em `../oficina-infra/k8s/base/microservices/oficina-billing-service/` e aplica o serviço quando encontra imagem publicada no ECR. Se `ENABLE_K8S_DEPLOY=true` for ligado antes de existir o Deployment `oficina-billing-service` no cluster, o workflow reporta a pré-condição ausente e falha em vez de terminar como sucesso sem executar rollout.
 
 ## Validação de contratos
 
@@ -111,7 +111,7 @@ A estratégia de entrega dos manifests está definida em [Estratégia de entrega
 
 Este repositório mantém o Dockerfile do serviço e não mantém cópia executável dos manifests Kubernetes para evitar divergência. A referência normativa do serviço fica em [Template Kubernetes do oficina-billing-service](../oficina-platform/templates/kubernetes/base/oficina-billing-service/), e o destino canônico de deploy é `../oficina-infra/k8s/base/microservices/oficina-billing-service/`.
 
-O deploy automatizado só deve ser habilitado com `ENABLE_K8S_DEPLOY=true` depois que o Deployment `oficina-billing-service` estiver materializado no `oficina-infra` e renderizado pelo overlay `../oficina-infra/k8s/overlays/lab/`.
+Depois que o Deployment `oficina-billing-service` estiver materializado pelo `oficina-infra`, o deploy automatizado com `ENABLE_K8S_DEPLOY=true` atualiza a imagem do container e valida o rollout no EKS.
 
 ## Endpoint técnico
 
