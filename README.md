@@ -82,7 +82,7 @@ BUILD SUCCESS
 
 Os workflows ficam em [.github/workflows/service-ci.yml](.github/workflows/service-ci.yml) e [.github/workflows/open-pr-to-main.yml](.github/workflows/open-pr-to-main.yml), derivados do [Template GitHub Actions para Microsserviços](../oficina-platform/templates/github-actions/README.md).
 
-Pull requests e pushes na `main` executam o check `service-ci-validate` com `./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false`, validam a cobertura mínima de 80%, executam o Quality Gate SonarCloud e publicam o artifact `jacoco-report-oficina-billing-service`.
+Pull requests e pushes na `main` executam o check `service-ci-validate` com `./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false`, validam a cobertura mínima de 80% e publicam o artifact `jacoco-report-oficina-billing-service`. A análise SonarCloud não é executada pelo GitHub Actions; use Automatic Analysis no SonarCloud ou check externo equivalente quando o Quality Gate for evidência da entrega.
 
 A publicação de imagem e o deploy Kubernetes são condicionais:
 
@@ -90,7 +90,9 @@ A publicação de imagem e o deploy Kubernetes são condicionais:
 - `ENABLE_K8S_DEPLOY=true` habilita atualização do Deployment no EKS;
 - em `workflow_dispatch`, os inputs `publish_image` e `deploy` permitem acionar esses estágios manualmente.
 
-Enquanto os manifests executáveis não estiverem materializados no `oficina-infra`, mantenha `ENABLE_K8S_DEPLOY=false` e use o job de validação como checagem obrigatória de branch.
+O workflow não usa GitHub Environment para evitar aprovação manual nos jobs. As variáveis e secrets de AWS/ECR/EKS devem estar em nível de repositório ou organização, e o controle manual do fluxo acontece no merge do PR aberto automaticamente a partir da branch `develop`.
+
+Enquanto os manifests executáveis não estiverem materializados no `oficina-infra`, mantenha `ENABLE_K8S_DEPLOY=false` e use o job de validação como checagem obrigatória de branch. Se `ENABLE_K8S_DEPLOY=true` for ligado antes de existir o Deployment `oficina-billing-service` no cluster, o workflow reporta a pré-condição ausente e pula o rollout em vez de executar `kubectl set image` contra um recurso inexistente.
 
 ## Validação de contratos
 

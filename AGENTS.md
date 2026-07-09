@@ -89,6 +89,10 @@ Antes de encerrar alterações relevantes, execute validação proporcional ao i
 
 Para mudanças em contratos de API, eventos ou Saga, valide também os artefatos correspondentes em [../oficina-platform](../oficina-platform/).
 
+## Versionamento
+
+Antes de concluir qualquer alteração relevante, verifique o `project.version` em [pom.xml](pom.xml). Não deixe versões `*-SNAPSHOT` em mudanças prontas para merge, publicação de imagem, release ou deploy; feche a versão no mesmo escopo da alteração ou incremente para uma nova versão fechada quando a mudança exigir novo artefato publicável.
+
 ## Commits
 
 Ao concluir alteração relevante neste repositório, crie commit local em português seguindo Conventional Commits, por exemplo:
