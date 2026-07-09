@@ -15,7 +15,7 @@ on:
         type: boolean
         default: false
       deploy:
-        description: Atualizar o Deployment no EKS mesmo com ENABLE_K8S_DEPLOY desabilitado.
+        description: Materializar ou atualizar o Deployment no EKS mesmo com ENABLE_K8S_DEPLOY desabilitado.
         required: false
         type: boolean
         default: false
@@ -220,14 +220,14 @@ jobs:
               ;;
           esac
 
-          publish_enabled=false
-          if [[ "${ENABLE_IMAGE_PUBLISH}" == "true" || "${MANUAL_PUBLISH_IMAGE}" == "true" || "${MANUAL_DEPLOY}" == "true" ]]; then
-            publish_enabled=true
-          fi
-
           deploy_enabled=false
           if [[ "${ENABLE_K8S_DEPLOY}" == "true" || "${MANUAL_DEPLOY}" == "true" ]]; then
             deploy_enabled=true
+          fi
+
+          publish_enabled=false
+          if [[ "${ENABLE_IMAGE_PUBLISH}" == "true" || "${MANUAL_PUBLISH_IMAGE}" == "true" || "${deploy_enabled}" == true ]]; then
+            publish_enabled=true
           fi
 
           current_version="$(extract_version pom.xml)"
@@ -320,7 +320,7 @@ jobs:
             need_release=true
           fi
 
-          if [[ "${deploy_enabled}" == true && ( "${deployment_exists}" == false || "${current_deployment_image}" != "${image_ref}" ) ]]; then
+          if [[ "${deploy_enabled}" == true && ( "${deployment_exists}" == false || "${current_deployment_image}" != "${image_ref}" || "${image_exists}" == false ) ]]; then
             need_deploy=true
           fi
 
@@ -477,7 +477,7 @@ jobs:
         run: echo "Publicacao de imagem desabilitada; use ENABLE_IMAGE_PUBLISH=true ou workflow_dispatch com publish_image=true."
 
   deploy_service:
-    if: github.ref_name == 'main' && needs.resolve_service_state.outputs.deploy_enabled == 'true' && needs.resolve_service_state.outputs.deployment_exists == 'true' && needs.resolve_service_state.outputs.need_deploy == 'true'
+    if: github.ref_name == 'main' && needs.resolve_service_state.outputs.deploy_enabled == 'true' && needs.resolve_service_state.outputs.need_deploy == 'true'
     name: deploy-service
     runs-on: ubuntu-latest
     needs:
@@ -487,18 +487,33 @@ jobs:
       contents: read
     env:
       AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+      API_GATEWAY_NAME: ${{ vars.API_GATEWAY_NAME || 'eks-lab-http-api' }}
       EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME || 'eks-lab' }}
       IMAGE_REF: ${{ needs.resolve_service_state.outputs.image_ref }}
+      INFRA_REF: ${{ vars.INFRA_REF || 'main' }}
+      INFRA_REPOSITORY: ${{ vars.INFRA_REPOSITORY || 'oficina-soat/oficina-infra' }}
+      JWT_SECRET_NAME: ${{ vars.JWT_SECRET_NAME || 'oficina/lab/jwt' }}
+      JWT_SECRET_PUBLIC_KEY_FIELD: ${{ vars.JWT_SECRET_PUBLIC_KEY_FIELD || 'publicKeyPem' }}
       K8S_CONTAINER_NAME: ${{ vars.K8S_CONTAINER_NAME }}
       K8S_DEPLOYMENT_NAME: ${{ vars.K8S_DEPLOYMENT_NAME }}
+      K8S_JWT_SECRET_NAME: ${{ vars.K8S_JWT_SECRET_NAME || 'oficina-jwt-keys' }}
       K8S_NAMESPACE: ${{ vars.K8S_NAMESPACE || 'default' }}
       K8S_ROLLOUT_TIMEOUT: ${{ vars.K8S_ROLLOUT_TIMEOUT || '300s' }}
+      OFICINA_AUTH_ISSUER: ${{ vars.OFICINA_AUTH_ISSUER }}
+      OFICINA_AUTH_JWKS_URI: ${{ vars.OFICINA_AUTH_JWKS_URI }}
       SERVICE_NAME: ${{ needs.resolve_service_state.outputs.service_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
         with:
           ref: ${{ needs.resolve_service_state.outputs.commit_sha }}
+
+      - name: Checkout infrastructure manifests
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.INFRA_REPOSITORY || 'oficina-soat/oficina-infra' }}
+          ref: ${{ vars.INFRA_REF || 'main' }}
+          path: oficina-infra
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v5
@@ -511,6 +526,15 @@ jobs:
           aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
+      - name: Ensure deploy tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v jq >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y jq
+          fi
+
       - name: Deploy service image to EKS
         shell: bash
         run: |
@@ -519,30 +543,44 @@ jobs:
           deployment_name="${K8S_DEPLOYMENT_NAME:-${SERVICE_NAME}}"
           container_name="${K8S_CONTAINER_NAME:-${SERVICE_NAME}}"
 
+          case "${SERVICE_NAME}" in
+            oficina-os-service)
+              export OFICINA_OS_SERVICE_IMAGE="${IMAGE_REF}"
+              ;;
+            oficina-billing-service)
+              export OFICINA_BILLING_SERVICE_IMAGE="${IMAGE_REF}"
+              ;;
+            oficina-execution-service)
+              export OFICINA_EXECUTION_SERVICE_IMAGE="${IMAGE_REF}"
+              ;;
+            *)
+              echo "Servico nao canonico: ${SERVICE_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
           aws eks update-kubeconfig \
             --region "${AWS_REGION}" \
             --name "${EKS_CLUSTER_NAME}"
 
-          kubectl -n "${K8S_NAMESPACE}" set image \
-            "deployment/${deployment_name}" \
-            "${container_name}=${IMAGE_REF}"
+          export MICROSERVICE_NAMES="${SERVICE_NAME}"
+          export WAIT_MICROSERVICE_ROLLOUT=true
+          export MICROSERVICE_ROLLOUT_TIMEOUT="${K8S_ROLLOUT_TIMEOUT}"
+
+          bash ./oficina-infra/scripts/manual/apply-microservices.sh
 
           kubectl -n "${K8S_NAMESPACE}" rollout status \
             "deployment/${deployment_name}" \
             --timeout="${K8S_ROLLOUT_TIMEOUT}"
 
-  report_missing_deployment:
-    if: github.ref_name == 'main' && needs.resolve_service_state.outputs.deploy_enabled == 'true' && needs.resolve_service_state.outputs.deployment_exists != 'true'
-    name: report-missing-deployment
-    runs-on: ubuntu-latest
-    needs:
-      - resolve_service_state
-      - publish_artifacts
-    steps:
-      - name: Report missing Kubernetes deployment
-        run: |
-          echo "Deploy Kubernetes habilitado, mas o Deployment ${{ needs.resolve_service_state.outputs.service_name }} nao existe no cluster."
-          echo "A imagem e a release podem ser publicadas; o rollout sera pulado ate o manifest executavel existir no oficina-infra."
+          current_image="$(
+            kubectl -n "${K8S_NAMESPACE}" get deployment "${deployment_name}" \
+              -o jsonpath="{.spec.template.spec.containers[?(@.name=='${container_name}')].image}"
+          )"
+          if [[ "${current_image}" != "${IMAGE_REF}" ]]; then
+            echo "Deployment ${deployment_name} ficou com imagem ${current_image}, esperado ${IMAGE_REF}" >&2
+            exit 1
+          fi
 
   report_noop:
     if: >
