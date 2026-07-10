@@ -87,6 +87,16 @@ Antes de encerrar alterações relevantes, execute validação proporcional ao i
 ./mvnw test -Ppostgresql
 ```
 
+Quando as ferramentas estiverem disponíveis, use também as validações complementares documentadas em [Ferramentas de validação local](../oficina-platform/docs/validation-tooling.md):
+
+- alterações em GitHub Actions: `actionlint`;
+- alterações em `Dockerfile`: `hadolint Dockerfile`;
+- alterações em scripts shell: `bash -n`, `shellcheck` e `shfmt -d`;
+- mudanças prontas para CI/CD ou release: `./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false`;
+- investigação de falhas remotas de CI/CD: use `gh` autenticado para consultar runs, jobs e logs.
+
+Se uma ferramenta complementar esperada não estiver instalada, registre a limitação na resposta final e execute a melhor validação equivalente disponível.
+
 Para mudanças em contratos de API, eventos ou Saga, valide também os artefatos correspondentes em [../oficina-platform](../oficina-platform/).
 
 ## Versionamento

@@ -40,6 +40,8 @@ Pré-requisitos:
 - acesso ao repositório `../oficina-platform`, usado pelos testes de contrato;
 - acesso opcional ao repositório `../oficina-infra`, usado para subir dependências compartilhadas da suíte.
 
+Ferramentas locais recomendadas para validação de CI/CD, Dockerfile e scripts estão em [Ferramentas de validação local](../oficina-platform/docs/validation-tooling.md).
+
 Dependências locais compartilhadas podem ser iniciadas pelo `oficina-infra`:
 
 ```bash
@@ -84,15 +86,16 @@ Os workflows ficam em [.github/workflows/service-ci.yml](.github/workflows/servi
 
 Pull requests e pushes na `main` executam o check `service-ci-validate` com `./mvnw -B verify -Ppostgresql -DskipITs=false -DfailIfNoTests=false`, validam a cobertura mínima de 80% e publicam o artifact `jacoco-report-oficina-billing-service`. A análise SonarCloud não é executada pelo GitHub Actions; use Automatic Analysis no SonarCloud ou check externo equivalente quando o Quality Gate for evidência da entrega.
 
-A publicação de imagem e o deploy Kubernetes são condicionais:
+A publicação de imagem e o deploy Kubernetes são automáticos por padrão em `main` e podem ser desligados explicitamente:
 
-- `ENABLE_IMAGE_PUBLISH=true` habilita consulta ao ECR, build/push da imagem Docker e release com metadados da imagem;
-- `ENABLE_K8S_DEPLOY=true` habilita publicação quando necessário, materialização ou atualização do Deployment no EKS e validação do rollout;
-- em `workflow_dispatch`, os inputs `publish_image` e `deploy` permitem acionar esses estágios manualmente.
+- `ENABLE_IMAGE_PUBLISH=false` desabilita consulta ao ECR, build/push da imagem Docker e release com metadados da imagem;
+- `ENABLE_K8S_DEPLOY=false` desabilita materialização ou atualização do Deployment no EKS e validação do rollout;
+- com as variáveis ausentes, o workflow publica imagem/release quando necessário e aplica o Deployment no EKS;
+- em `workflow_dispatch`, os inputs `publish_image` e `deploy` permitem forçar esses estágios mesmo quando as variáveis foram desabilitadas.
 
 O workflow não usa GitHub Environment para evitar aprovação manual nos jobs. As variáveis e secrets de AWS/ECR/EKS devem estar em nível de repositório ou organização, e o controle manual do fluxo acontece no merge do PR aberto automaticamente a partir da branch `develop`.
 
-Quando `ENABLE_K8S_DEPLOY=true`, o workflow do serviço faz checkout do `oficina-infra`, aplica o manifest canônico em `../oficina-infra/k8s/base/microservices/oficina-billing-service/` com a imagem publicada pelo próprio workflow, aguarda o rollout no EKS e confere se o container ficou com a imagem esperada. Após recriar a infraestrutura base do lab, não é necessário executar um segundo `Deploy Lab` apenas para materializar este serviço.
+Quando `ENABLE_K8S_DEPLOY` não é `false`, o workflow do serviço faz checkout do `oficina-infra`, aplica o manifest canônico em `../oficina-infra/k8s/base/microservices/oficina-billing-service/` com a imagem publicada pelo próprio workflow, aguarda o rollout no EKS e confere se o container ficou com a imagem esperada. Após recriar a infraestrutura base do lab, não é necessário executar um segundo `Deploy Lab` apenas para materializar este serviço.
 
 ## Validação de contratos
 
@@ -111,7 +114,7 @@ A estratégia de entrega dos manifests está definida em [Estratégia de entrega
 
 Este repositório mantém o Dockerfile do serviço e não mantém cópia executável dos manifests Kubernetes para evitar divergência. A referência normativa do serviço fica em [Template Kubernetes do oficina-billing-service](../oficina-platform/templates/kubernetes/base/oficina-billing-service/), e o destino canônico de deploy é `../oficina-infra/k8s/base/microservices/oficina-billing-service/`.
 
-O deploy automatizado com `ENABLE_K8S_DEPLOY=true` materializa o Deployment quando ele ainda não existe, atualiza a imagem quando ele já existe e valida o rollout no EKS usando o script canônico `scripts/manual/apply-microservices.sh` do `oficina-infra`.
+O deploy automatizado com `ENABLE_K8S_DEPLOY` diferente de `false` materializa o Deployment quando ele ainda não existe, atualiza a imagem quando ele já existe e valida o rollout no EKS usando o script canônico `scripts/manual/apply-microservices.sh` do `oficina-infra`.
 
 ## Endpoint técnico
 
