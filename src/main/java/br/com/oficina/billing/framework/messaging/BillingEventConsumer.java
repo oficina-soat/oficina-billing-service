@@ -51,7 +51,7 @@ public class BillingEventConsumer {
         }
         StructuredLog.withFields(eventFields(envelope, "PROCESSING", correlationId), () -> {
             aplicarEvento(envelope);
-            store.registrarEventoConsumido(envelope.eventId());
+            store.registrarEventoConsumido(envelope);
         });
         logEvent("domain event consumed", envelope, "CONSUMED", correlationId);
         return true;

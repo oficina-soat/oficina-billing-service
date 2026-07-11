@@ -27,7 +27,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class BillingEventConsumerTest {
-    private final BillingEventStore store = new BillingEventStore();
+    private final BillingEventStore store = new InMemoryBillingEventStore();
     private final InMemoryOrcamentoDataSourceAdapter orcamentoRepository = new InMemoryOrcamentoDataSourceAdapter();
     private final InMemoryPagamentoDataSourceAdapter pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
     private final GerarOrcamentoUseCase gerarOrcamentoUseCase =

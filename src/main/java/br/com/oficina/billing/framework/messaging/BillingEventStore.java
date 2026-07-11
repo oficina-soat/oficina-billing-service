@@ -4,160 +4,25 @@ import br.com.oficina.billing.core.entities.ItemOrcamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.core.interfaces.gateway.FinanceiroSnapshotGateway;
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
-import br.com.oficina.billing.framework.observability.StructuredLog;
-import jakarta.enterprise.context.ApplicationScoped;
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import org.jboss.logging.Logger;
-import org.jboss.logging.MDC;
 
-@ApplicationScoped
-public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEventSender {
-    private static final Logger LOG = Logger.getLogger(BillingEventStore.class);
-    private static final String PRODUCER = "oficina-billing-service";
-    private static final String STATUS_PENDING = "PENDING";
-    private static final String STATUS_PUBLISHED = "PUBLISHED";
+public interface BillingEventStore extends FinanceiroSnapshotGateway, OutboxEventSender {
+    boolean registrarEventoConsumido(DomainEventEnvelope envelope);
 
-    private final Map<UUID, LinkedHashMap<UUID, ItemOrcamento>> itensPorOrdemServico = new LinkedHashMap<>();
-    private final Map<UUID, OutboxEventRecord> outboxEvents = new LinkedHashMap<>();
-    private final LinkedHashSet<UUID> consumedEventIds = new LinkedHashSet<>();
+    boolean registrarEventoConsumido(UUID eventId);
 
-    @Override
-    public CompletableFuture<List<ItemOrcamento>> snapshotFinanceiro(UUID ordemServicoId) {
-        return CompletableFuture.completedFuture(snapshotFinanceiroLocal(ordemServicoId));
-    }
+    boolean eventoConsumido(UUID eventId);
 
-    public synchronized boolean registrarEventoConsumido(UUID eventId) {
-        return consumedEventIds.add(eventId);
-    }
+    void registrarItem(UUID ordemServicoId, ItemOrcamento item);
 
-    public synchronized boolean eventoConsumido(UUID eventId) {
-        return consumedEventIds.contains(eventId);
-    }
+    List<OutboxEventRecord> listarOutbox();
 
-    public synchronized void registrarItem(UUID ordemServicoId, ItemOrcamento item) {
-        itensPorOrdemServico
-                .computeIfAbsent(ordemServicoId, ignored -> new LinkedHashMap<>())
-                .put(item.itemId(), item);
-    }
+    List<OutboxEventRecord> publicarPendentes();
 
-    @Override
-    public CompletableFuture<Void> registrarOutbox(
-            String aggregateId,
-            String eventType,
-            String topic,
-            Map<String, Object> payload,
-            String correlationId,
-            OffsetDateTime occurredAt) {
-        registrarOutboxRecord(aggregateId, eventType, topic, payload, correlationId, occurredAt);
-        return CompletableFuture.completedFuture(null);
-    }
-
-    private synchronized OutboxEventRecord registrarOutboxRecord(
-            String aggregateId,
-            String eventType,
-            String topic,
-            Map<String, Object> payload,
-            String correlationId,
-            OffsetDateTime occurredAt) {
-        var now = OffsetDateTime.now(ZoneOffset.UTC);
-        var effectiveCorrelationId = correlationId(correlationId);
-        var event = new OutboxEventRecord(
-                UUID.randomUUID(),
-                aggregateId,
-                eventType,
-                1,
-                topic,
-                PRODUCER,
-                payload,
-                STATUS_PENDING,
-                effectiveCorrelationId,
-                occurredAt == null ? now : occurredAt,
-                now,
-                null,
-                0,
-                null);
-        outboxEvents.put(event.eventId(), event);
-        logEvent("outbox event registered", event, STATUS_PENDING);
-        return event;
-    }
-
-    private synchronized List<ItemOrcamento> snapshotFinanceiroLocal(UUID ordemServicoId) {
-        var itens = itensPorOrdemServico.get(ordemServicoId);
-        if (itens == null) {
-            return List.of();
-        }
-        return List.copyOf(itens.values());
-    }
-
-    public synchronized List<OutboxEventRecord> listarOutbox() {
-        return outboxEvents.values().stream()
-                .sorted(Comparator.comparing(OutboxEventRecord::createdAt))
-                .toList();
-    }
-
-    public synchronized List<OutboxEventRecord> publicarPendentes() {
-        var publicados = new ArrayList<OutboxEventRecord>();
-        var now = OffsetDateTime.now(ZoneOffset.UTC);
-        for (var event : new ArrayList<>(outboxEvents.values())) {
-            if (!STATUS_PENDING.equals(event.status())) {
-                continue;
-            }
-            var publicado = new OutboxEventRecord(
-                    event.eventId(),
-                    event.aggregateId(),
-                    event.eventType(),
-                    event.eventVersion(),
-                    event.topic(),
-                    event.producer(),
-                    event.payload(),
-                    STATUS_PUBLISHED,
-                    event.correlationId(),
-                    event.occurredAt(),
-                    event.createdAt(),
-                    now,
-                    event.attempts() + 1,
-                    null);
-            outboxEvents.put(publicado.eventId(), publicado);
-            publicados.add(publicado);
-            logEvent("outbox event published", publicado, STATUS_PUBLISHED);
-        }
-        return publicados;
-    }
-
-    private void logEvent(String message, OutboxEventRecord event, String messageStatus) {
-        StructuredLog.info(LOG, message, Map.of(
-                "correlationId", event.correlationId(),
-                "eventId", event.eventId().toString(),
-                "eventType", event.eventType(),
-                "eventVersion", event.eventVersion(),
-                "topic", event.topic(),
-                "producer", event.producer(),
-                "aggregateId", event.aggregateId(),
-                "messageStatus", messageStatus));
-    }
-
-    private String correlationId(String correlationId) {
-        if (correlationId != null && !correlationId.isBlank()) {
-            return correlationId.trim();
-        }
-        var mdcCorrelationId = MDC.get("correlationId");
-        if (mdcCorrelationId != null && !mdcCorrelationId.toString().isBlank()) {
-            return mdcCorrelationId.toString();
-        }
-        return "local-" + UUID.randomUUID();
-    }
-
-    public ItemOrcamento itemPeca(Map<String, Object> peca) {
+    default ItemOrcamento itemPeca(Map<String, Object> peca) {
         var pecaId = uuid(peca.get("pecaId"));
         return new ItemOrcamento(
                 TipoItemOrcamento.PECA,
@@ -169,7 +34,7 @@ public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEvent
                 decimal(peca.get("valorTotal")));
     }
 
-    public ItemOrcamento itemServico(Map<String, Object> servico) {
+    default ItemOrcamento itemServico(Map<String, Object> servico) {
         var servicoId = uuid(servico.get("servicoId"));
         return new ItemOrcamento(
                 TipoItemOrcamento.SERVICO,
@@ -181,21 +46,21 @@ public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEvent
                 decimal(servico.get("valorTotal")));
     }
 
-    private UUID uuid(Object value) {
+    private static UUID uuid(Object value) {
         if (value == null) {
             throw new IllegalArgumentException("UUID obrigatorio no payload do evento.");
         }
         return value instanceof UUID uuid ? uuid : UUID.fromString(value.toString());
     }
 
-    private BigDecimal decimal(Object value) {
+    private static BigDecimal decimal(Object value) {
         if (value == null) {
             throw new IllegalArgumentException("Valor numerico obrigatorio no payload do evento.");
         }
         return value instanceof BigDecimal decimal ? decimal : new BigDecimal(value.toString());
     }
 
-    private String texto(Object value, String fallback) {
+    private static String texto(Object value, String fallback) {
         return value == null || value.toString().isBlank() ? fallback : value.toString();
     }
 }
