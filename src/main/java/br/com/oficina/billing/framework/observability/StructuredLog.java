@@ -7,6 +7,10 @@ import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 
 public final class StructuredLog {
+    private static final String EVENT_TYPE = "eventType";
+    private static final String DOMAIN_EVENT_TYPE = "domainEventType";
+    private static final String OTEL_EVENT_TYPE = "event.type";
+
     private StructuredLog() {
     }
 
@@ -44,6 +48,11 @@ public final class StructuredLog {
         var effectiveFields = new LinkedHashMap<String, Object>();
         if (fields != null) {
             effectiveFields.putAll(fields);
+        }
+        var eventType = effectiveFields.get(EVENT_TYPE);
+        if (eventType != null && !eventType.toString().isBlank()) {
+            effectiveFields.putIfAbsent(DOMAIN_EVENT_TYPE, eventType.toString());
+            effectiveFields.putIfAbsent(OTEL_EVENT_TYPE, eventType.toString());
         }
         var spanContext = Span.current().getSpanContext();
         if (spanContext.isValid()) {
