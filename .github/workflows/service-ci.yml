@@ -57,6 +57,13 @@ jobs:
           java-version: "25"
           cache: maven
 
+      - name: Cache SonarQube packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
       - name: Resolve service configuration
         shell: bash
         run: |
@@ -175,6 +182,41 @@ jobs:
 
       - name: Run Maven verification
         run: ./mvnw -B verify -P"${MAVEN_PROFILE}" -DskipITs=false -DfailIfNoTests=false
+
+      - name: Run SonarCloud analysis
+        shell: bash
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${SONAR_TOKEN:-}" ]]; then
+            echo "SONAR_TOKEN nao configurado. Configure o secret SONAR_TOKEN no repositorio ou na organizacao GitHub." >&2
+            exit 1
+          fi
+
+          if [[ ! -s target/jacoco-report/jacoco.xml ]]; then
+            echo "Relatorio JaCoCo XML nao encontrado em target/jacoco-report/jacoco.xml." >&2
+            exit 1
+          fi
+
+          sonar_args=(
+            "-Dsonar.organization=oficina-soat"
+            "-Dsonar.projectKey=${SERVICE_NAME}"
+            "-Dsonar.coverage.jacoco.xmlReportPaths=target/jacoco-report/jacoco.xml"
+            "-Dsonar.qualitygate.wait=true"
+            "-Dsonar.qualitygate.timeout=300"
+            "-Dsonar.issue.ignore.multicriteria=postgresqlVarchar,postgresqlDuplicatedLiterals"
+            "-Dsonar.issue.ignore.multicriteria.postgresqlVarchar.ruleKey=plsql:VarcharUsageCheck"
+            "-Dsonar.issue.ignore.multicriteria.postgresqlVarchar.resourceKey=**/src/main/resources/db/migration/*.sql"
+            "-Dsonar.issue.ignore.multicriteria.postgresqlDuplicatedLiterals.ruleKey=plsql:S1192"
+            "-Dsonar.issue.ignore.multicriteria.postgresqlDuplicatedLiterals.resourceKey=**/src/main/resources/db/migration/*.sql"
+          )
+
+          ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -P"${MAVEN_PROFILE}" \
+            -DskipTests=true \
+            "${sonar_args[@]}"
 
       - name: Upload coverage report
         if: ${{ always() }}
