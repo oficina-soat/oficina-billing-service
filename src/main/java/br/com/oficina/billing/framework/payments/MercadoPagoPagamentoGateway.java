@@ -3,12 +3,13 @@ package br.com.oficina.billing.framework.payments;
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
-import br.com.oficina.billing.core.interfaces.PagamentoGateway;
-import br.com.oficina.billing.core.interfaces.PagamentoGatewayResult;
+import br.com.oficina.billing.core.interfaces.gateway.PagamentoGateway;
+import br.com.oficina.billing.core.interfaces.gateway.PagamentoGatewayResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.WebApplicationException;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
@@ -33,7 +34,11 @@ public class MercadoPagoPagamentoGateway implements PagamentoGateway {
     }
 
     @Override
-    public PagamentoGatewayResult solicitar(Pagamento pagamento) {
+    public CompletableFuture<PagamentoGatewayResult> solicitar(Pagamento pagamento) {
+        return CompletableFuture.completedFuture(solicitarPagamento(pagamento));
+    }
+
+    private PagamentoGatewayResult solicitarPagamento(Pagamento pagamento) {
         if (!enabled) {
             return PagamentoGatewayResult.naoIntegrado();
         }

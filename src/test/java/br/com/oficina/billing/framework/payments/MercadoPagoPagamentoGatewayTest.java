@@ -26,7 +26,7 @@ class MercadoPagoPagamentoGatewayTest {
                 Optional.empty(),
                 "cliente.local@oficina.com");
 
-        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX));
+        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX)).join();
 
         assertFalse(resultado.integrado());
         assertEquals(StatusPagamento.CRIADO, resultado.status());
@@ -45,7 +45,7 @@ class MercadoPagoPagamentoGatewayTest {
                 Optional.of("token-teste"),
                 "cliente.local@oficina.com");
 
-        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX));
+        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX)).join();
 
         assertTrue(resultado.integrado());
         assertEquals(StatusPagamento.CONFIRMADO, resultado.status());
@@ -62,7 +62,7 @@ class MercadoPagoPagamentoGatewayTest {
                 Optional.of("token-teste"),
                 "cliente.local@oficina.com");
 
-        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX));
+        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX)).join();
 
         assertEquals(StatusPagamento.RECUSADO, resultado.status());
         assertEquals("654321", resultado.transacaoExternaId());
