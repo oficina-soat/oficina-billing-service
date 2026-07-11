@@ -48,18 +48,21 @@ class OrcamentoServiceTest {
         var aprovado = service.aprovar(service.gerar(UUID.randomUUID()).orcamentoId(), "Cliente aprovou");
 
         assertEquals(StatusOrcamento.APROVADO, aprovado.status());
-        var erroAprovacaoRepetida = assertThrows(BusinessException.class, () -> service.aprovar(aprovado.orcamentoId(), null));
+        var orcamentoAprovadoId = aprovado.orcamentoId();
+        var erroAprovacaoRepetida = assertThrows(BusinessException.class, () -> service.aprovar(orcamentoAprovadoId, null));
         assertEquals("INVALID_STATE_TRANSITION", erroAprovacaoRepetida.code());
 
         var recusado = service.recusar(service.gerar(UUID.randomUUID()).orcamentoId(), "Cliente recusou");
 
         assertEquals(StatusOrcamento.RECUSADO, recusado.status());
-        var erroRecusaRepetida = assertThrows(BusinessException.class, () -> service.recusar(recusado.orcamentoId(), null));
+        var orcamentoRecusadoId = recusado.orcamentoId();
+        var erroRecusaRepetida = assertThrows(BusinessException.class, () -> service.recusar(orcamentoRecusadoId, null));
         assertEquals("INVALID_STATE_TRANSITION", erroRecusaRepetida.code());
     }
 
     @Test
     void deveFalharAoConsultarOrcamentoInexistente() {
-        assertThrows(ResourceNotFoundException.class, () -> service.consultar(UUID.randomUUID()));
+        var orcamentoId = UUID.randomUUID();
+        assertThrows(ResourceNotFoundException.class, () -> service.consultar(orcamentoId));
     }
 }
