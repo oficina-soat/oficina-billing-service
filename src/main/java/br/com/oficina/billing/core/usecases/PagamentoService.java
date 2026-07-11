@@ -1,6 +1,7 @@
 package br.com.oficina.billing.core.usecases;
 
 import br.com.oficina.billing.core.entities.MetodoPagamento;
+import br.com.oficina.billing.core.entities.Orcamento;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusOrcamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
@@ -109,7 +110,7 @@ public class PagamentoService {
     public Pagamento solicitarPagamentoDaOrdem(UUID ordemServicoId) {
         var orcamento = orcamentoService.consultarPorOrdemServico(ordemServicoId).stream()
                 .filter(item -> item.status() == StatusOrcamento.APROVADO)
-                .max(Comparator.comparing(orcamentoAprovado -> orcamentoAprovado.atualizadoEm()))
+                .max(Comparator.comparing(Orcamento::atualizadoEm))
                 .orElseThrow(() -> new ResourceNotFoundException("Orcamento aprovado nao encontrado para a ordem de servico."));
         return repository.findByOrcamentoId(orcamento.orcamentoId())
                 .orElseGet(() -> registrar(ordemServicoId, orcamento.orcamentoId(), orcamento.valorTotal(), MetodoPagamento.PIX));
