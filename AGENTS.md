@@ -101,7 +101,13 @@ Para mudanças em contratos de API, eventos ou Saga, valide também os artefatos
 
 ## Versionamento
 
-Antes de concluir qualquer alteração relevante, verifique o `project.version` em [pom.xml](pom.xml). Não deixe versões `*-SNAPSHOT` em mudanças prontas para merge, publicação de imagem, release ou deploy; feche a versão no mesmo escopo da alteração ou incremente para uma nova versão fechada quando a mudança exigir novo artefato publicável.
+Antes de concluir qualquer alteração relevante, verifique o `project.version` em [pom.xml](pom.xml) e registre a decisão na revisão final.
+
+Trate como mudança publicável qualquer alteração em código Java, `pom.xml`, `Dockerfile`, configuração runtime, resources, migrations, testes que alterem o artefato validado, dependências, observabilidade, segurança, mensageria ou scripts usados pelo build da imagem.
+
+Toda mudança publicável candidata a merge em `main`, publicação de imagem, release ou deploy deve incrementar `project.version` no mesmo commit ou PR. Use SemVer fechado `MAJOR.MINOR.PATCH`, sem sufixo `SNAPSHOT`; prefira patch para correções compatíveis, minor para funcionalidades compatíveis e major apenas quando houver quebra deliberada acompanhada dos contratos ou ADRs necessários no [oficina-platform](../oficina-platform/).
+
+Antes de considerar a mudança pronta, compare `project.version` com a base do PR ou com o commit anterior da `main`; se a versão não aumentou para uma versão ainda não publicada como tag `v<project.version>` e imagem `<project.version>`, ajuste o `pom.xml` antes de concluir. Não reutilize versão já publicada para novo build, release ou rollout.
 
 ## Commits
 
