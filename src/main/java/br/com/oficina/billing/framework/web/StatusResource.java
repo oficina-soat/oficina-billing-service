@@ -19,14 +19,19 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 @Path("/api/v1/status")
 @Produces(MediaType.APPLICATION_JSON)
 public class StatusResource {
+    private final StatusController statusController;
+    private final String applicationName;
+    private final String environment;
+
     @Inject
-    StatusController statusController;
-
-    @ConfigProperty(name = "quarkus.application.name")
-    String applicationName;
-
-    @ConfigProperty(name = "oficina.observability.deployment-environment")
-    String environment;
+    public StatusResource(
+            StatusController statusController,
+            @ConfigProperty(name = "quarkus.application.name") String applicationName,
+            @ConfigProperty(name = "oficina.observability.deployment-environment") String environment) {
+        this.statusController = statusController;
+        this.applicationName = applicationName;
+        this.environment = environment;
+    }
 
     @GET
     @PermitAll

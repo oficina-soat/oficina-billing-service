@@ -70,7 +70,9 @@ public class PagamentoController {
     }
 
     public CompletableFuture<Pagamento> cancelarPagamento(UUID pagamentoId, CancelamentoRequest request) {
-        return cancelarPagamentoUseCase.executar(new CancelarPagamentoUseCase.Command(pagamentoId));
+        return cancelarPagamentoUseCase.executar(new CancelarPagamentoUseCase.Command(
+                pagamentoId,
+                request == null ? null : request.motivo()));
     }
 
     private void validar(PagamentoCreateRequest request) {

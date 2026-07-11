@@ -25,11 +25,14 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class PagamentoResource {
-    @Inject
-    PagamentoController pagamentoController;
+    private final PagamentoController pagamentoController;
+    private final PagamentoPresenterAdapter pagamentoPresenter;
 
     @Inject
-    PagamentoPresenterAdapter pagamentoPresenter;
+    public PagamentoResource(PagamentoController pagamentoController, PagamentoPresenterAdapter pagamentoPresenter) {
+        this.pagamentoController = pagamentoController;
+        this.pagamentoPresenter = pagamentoPresenter;
+    }
 
     @POST
     @Path("/pagamentos")

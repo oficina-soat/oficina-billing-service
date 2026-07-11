@@ -43,15 +43,13 @@ public class ConfirmarPagamentoUseCase {
                             command.provedor(),
                             command.transacaoExternaId());
                 })
-                .thenCompose(atualizado -> PagamentoEventPayloads.registrarEvento(
+                .thenCompose(atualizado -> PagamentoEventPayloads.registrarEvento(new PagamentoEventPayloads.Registro(
                         outboxEventSender,
                         atualizado,
-                        "pagamentoConfirmado",
-                        "oficina.billing.pagamento-confirmado",
-                        "confirmadoEm",
+                        PagamentoEventPayloads.PAGAMENTO_CONFIRMADO,
                         atualizado.atualizadoEm(),
                         null,
-                        null)
+                        null))
                         .thenApply(ignored -> atualizado));
     }
 

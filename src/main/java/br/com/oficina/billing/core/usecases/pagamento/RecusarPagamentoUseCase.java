@@ -43,15 +43,13 @@ public class RecusarPagamentoUseCase {
                             command.provedor(),
                             pagamento.transacaoExternaId());
                 })
-                .thenCompose(atualizado -> PagamentoEventPayloads.registrarEvento(
+                .thenCompose(atualizado -> PagamentoEventPayloads.registrarEvento(new PagamentoEventPayloads.Registro(
                         outboxEventSender,
                         atualizado,
-                        "pagamentoRecusado",
-                        "oficina.billing.pagamento-recusado",
-                        "recusadoEm",
+                        PagamentoEventPayloads.PAGAMENTO_RECUSADO,
                         atualizado.atualizadoEm(),
                         command.provedor(),
-                        command.motivo())
+                        command.motivo()))
                         .thenApply(ignored -> atualizado));
     }
 

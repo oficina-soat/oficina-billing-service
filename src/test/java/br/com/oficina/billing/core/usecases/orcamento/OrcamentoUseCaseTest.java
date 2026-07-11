@@ -99,7 +99,8 @@ class OrcamentoUseCaseTest {
     private <T extends Throwable> T assertFutureThrows(
             Class<T> expectedType,
             Supplier<CompletableFuture<?>> executable) {
-        var exception = assertThrows(CompletionException.class, () -> executable.get().join());
+        var future = executable.get();
+        var exception = assertThrows(CompletionException.class, future::join);
         return assertInstanceOf(expectedType, exception.getCause());
     }
 }

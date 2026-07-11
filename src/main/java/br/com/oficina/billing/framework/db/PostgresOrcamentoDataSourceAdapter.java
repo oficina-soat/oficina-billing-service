@@ -88,23 +88,11 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
     }
 
     private Orcamento saveBlocking(Orcamento orcamento) {
-        try (var connection = dataSource.getConnection()) {
-            var previousAutoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                upsertOrcamento(connection, orcamento);
-                replaceItens(connection, orcamento);
-                connection.commit();
-                return orcamento;
-            } catch (SQLException | RuntimeException exception) {
-                rollback(connection);
-                throw exception;
-            } finally {
-                connection.setAutoCommit(previousAutoCommit);
-            }
-        } catch (SQLException exception) {
-            throw persistenceFailure(exception);
-        }
+        return inTransaction(connection -> {
+            upsertOrcamento(connection, orcamento);
+            replaceItens(connection, orcamento);
+            return orcamento;
+        });
     }
 
     @Override
@@ -166,8 +154,8 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
             statement.executeUpdate();
         }
         try (var statement = connection.prepareStatement(INSERT_ITEM)) {
+            statement.setObject(1, orcamento.orcamentoId());
             for (var item : orcamento.itens()) {
-                statement.setObject(1, orcamento.orcamentoId());
                 statement.setString(2, item.tipo().name());
                 statement.setObject(3, item.itemId());
                 if (item.referenciaCatalogoId() == null) {
@@ -220,8 +208,36 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
     private void rollback(Connection connection) {
         try {
             connection.rollback();
-        } catch (SQLException ignored) {
+        } catch (SQLException _) {
             // The original persistence failure is more useful to callers.
         }
+    }
+
+    private <T> T inTransaction(SqlOperation<T> operation) {
+        try (var connection = dataSource.getConnection()) {
+            return executeInTransaction(connection, operation);
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    private <T> T executeInTransaction(Connection connection, SqlOperation<T> operation) throws SQLException {
+        var previousAutoCommit = connection.getAutoCommit();
+        connection.setAutoCommit(false);
+        try {
+            var result = operation.execute(connection);
+            connection.commit();
+            return result;
+        } catch (SQLException | RuntimeException exception) {
+            rollback(connection);
+            throw exception;
+        } finally {
+            connection.setAutoCommit(previousAutoCommit);
+        }
+    }
+
+    @FunctionalInterface
+    private interface SqlOperation<T> {
+        T execute(Connection connection) throws SQLException;
     }
 }
