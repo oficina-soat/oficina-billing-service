@@ -143,6 +143,62 @@ class BillingResourceTest {
     }
 
     @Test
+    void shouldRefuseCreatedPayment() {
+        var pagamento = criarPagamentoCriado();
+
+        given()
+                .header("X-Idempotency-Key", "recusar-pagamento-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("""
+                        {
+                          "provedor": "mercado-pago",
+                          "motivo": "Pagamento recusado pelo provedor"
+                        }
+                        """)
+                .when()
+                .post("/api/v1/pagamentos/{pagamentoId}/recusa", pagamento.pagamentoId())
+                .then()
+                .statusCode(200)
+                .body("pagamentoId", equalTo(pagamento.pagamentoId()))
+                .body("status", equalTo("RECUSADO"))
+                .body("provedor", equalTo("mercado-pago"));
+
+        given()
+                .when()
+                .get("/api/v1/pagamentos/{pagamentoId}", pagamento.pagamentoId())
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("RECUSADO"));
+    }
+
+    @Test
+    void shouldCancelCreatedPayment() {
+        var pagamento = criarPagamentoCriado();
+
+        given()
+                .header("X-Idempotency-Key", "cancelar-pagamento-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("""
+                        {
+                          "motivo": "Cancelado antes da captura"
+                        }
+                        """)
+                .when()
+                .post("/api/v1/pagamentos/{pagamentoId}/cancelamento", pagamento.pagamentoId())
+                .then()
+                .statusCode(200)
+                .body("pagamentoId", equalTo(pagamento.pagamentoId()))
+                .body("status", equalTo("CANCELADO"));
+
+        given()
+                .when()
+                .get("/api/v1/pagamentos/{pagamentoId}", pagamento.pagamentoId())
+                .then()
+                .statusCode(200)
+                .body("status", equalTo("CANCELADO"));
+    }
+
+    @Test
     void shouldRejectSecondBudgetDecision() {
         var ordemServicoId = UUID.randomUUID().toString();
         var orcamentoId = criarOrcamento(ordemServicoId);
@@ -209,5 +265,44 @@ class BillingResourceTest {
                 .extract()
                 .path("orcamentoId")
                 .toString();
+    }
+
+    private PagamentoCriado criarPagamentoCriado() {
+        var ordemServicoId = UUID.randomUUID().toString();
+        var orcamentoId = criarOrcamento(ordemServicoId);
+        aprovarOrcamento(orcamentoId);
+        var pagamentoId = given()
+                .header("X-Idempotency-Key", "pagamento-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("""
+                        {
+                          "ordemServicoId": "%s",
+                          "orcamentoId": "%s",
+                          "valor": 0,
+                          "metodo": "PIX"
+                        }
+                        """.formatted(ordemServicoId, orcamentoId))
+                .when()
+                .post("/api/v1/pagamentos")
+                .then()
+                .statusCode(201)
+                .extract()
+                .path("pagamentoId")
+                .toString();
+        return new PagamentoCriado(pagamentoId);
+    }
+
+    private void aprovarOrcamento(String orcamentoId) {
+        given()
+                .header("X-Idempotency-Key", "aprovar-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("{}")
+                .when()
+                .post("/api/v1/orcamentos/{orcamentoId}/aprovacao", orcamentoId)
+                .then()
+                .statusCode(200);
+    }
+
+    private record PagamentoCriado(String pagamentoId) {
     }
 }

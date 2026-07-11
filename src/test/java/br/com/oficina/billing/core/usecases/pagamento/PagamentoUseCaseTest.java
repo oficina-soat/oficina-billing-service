@@ -7,7 +7,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Orcamento;
-import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
@@ -56,6 +55,49 @@ class PagamentoUseCaseTest {
     }
 
     @Test
+    void deveAplicarResultadosCriadoERecusadoRetornadosPeloGateway() {
+        var pagamentoCriadoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var registrarPagamentoCriadoUseCase = registrarPagamentoUseCase(
+                pagamentoCriadoRepository,
+                pagamento -> CompletableFuture.completedFuture(
+                        PagamentoGatewayResult.criado("mercado-pago", "mp-criado-001")));
+        var orcamentoCriado = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+
+        var pagamentoCriado = registrarPagamentoCriadoUseCase.executar(new RegistrarPagamentoUseCase.Command(
+                orcamentoCriado.ordemServicoId(),
+                orcamentoCriado.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+
+        assertEquals(StatusPagamento.CRIADO, pagamentoCriado.status());
+        assertEquals("mercado-pago", pagamentoCriado.provedor());
+        assertEquals("mp-criado-001", pagamentoCriado.transacaoExternaId());
+
+        var pagamentoRecusadoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var registrarPagamentoRecusadoUseCase = registrarPagamentoUseCase(
+                pagamentoRecusadoRepository,
+                pagamento -> CompletableFuture.completedFuture(PagamentoGatewayResult.recusado(
+                        "mercado-pago",
+                        "mp-recusado-001",
+                        "Pagamento recusado pelo provedor")));
+        var orcamentoRecusado = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+
+        var pagamentoRecusado = registrarPagamentoRecusadoUseCase.executar(new RegistrarPagamentoUseCase.Command(
+                orcamentoRecusado.ordemServicoId(),
+                orcamentoRecusado.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+
+        assertEquals(StatusPagamento.RECUSADO, pagamentoRecusado.status());
+        assertEquals("mercado-pago", pagamentoRecusado.provedor());
+        assertEquals("mp-recusado-001", pagamentoRecusado.transacaoExternaId());
+        assertTrue(eventStore.listarOutbox().stream().anyMatch(event ->
+                event.eventType().equals("pagamentoRecusado")
+                        && event.topic().equals("oficina.billing.pagamento-recusado")
+                        && event.payload().get("motivo").equals("Pagamento recusado pelo provedor")));
+    }
+
+    @Test
     void deveRejeitarPagamentoQuandoOrcamentoNaoPertenceAOrdemOuNaoEstaAprovado() {
         var service = registrarPagamentoUseCase(new InMemoryPagamentoDataSourceAdapter(), gatewayNaoIntegrado());
         var orcamentoGerado = gerar(UUID.randomUUID());
@@ -83,6 +125,27 @@ class PagamentoUseCaseTest {
     }
 
     @Test
+    void deveRejeitarPagamentoComValorNegativoOuOrcamentoInexistente() {
+        var service = registrarPagamentoUseCase(new InMemoryPagamentoDataSourceAdapter(), gatewayNaoIntegrado());
+        var orcamentoAprovado = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+
+        var erroValor = assertFutureThrows(BusinessException.class, () ->
+                service.executar(new RegistrarPagamentoUseCase.Command(
+                        orcamentoAprovado.ordemServicoId(),
+                        orcamentoAprovado.orcamentoId(),
+                        BigDecimal.valueOf(-1),
+                        MetodoPagamento.PIX)));
+        assertEquals("VALIDATION_ERROR", erroValor.code());
+
+        assertFutureThrows(ResourceNotFoundException.class, () ->
+                service.executar(new RegistrarPagamentoUseCase.Command(
+                        UUID.randomUUID(),
+                        UUID.randomUUID(),
+                        BigDecimal.ZERO,
+                        MetodoPagamento.PIX)));
+    }
+
+    @Test
     void deveSolicitarPagamentoDaOrdemDeFormaIdempotentePorOrcamento() {
         var pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
         var registrarPagamentoUseCase = registrarPagamentoUseCase(pagamentoRepository, gatewayNaoIntegrado());
@@ -102,6 +165,116 @@ class PagamentoUseCaseTest {
         assertEquals(primeiro.pagamentoId(), segundo.pagamentoId());
         assertEquals(1, consultarPagamentosDaOrdemServicoUseCase.executar(
                 new ConsultarPagamentosDaOrdemServicoUseCase.Command(orcamento.ordemServicoId())).join().size());
+    }
+
+    @Test
+    void deveRecusarPagamentoCriadoEPublicarEvento() {
+        var pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var registrarPagamentoUseCase = registrarPagamentoUseCase(pagamentoRepository, gatewayNaoIntegrado());
+        var recusarPagamentoUseCase = new RecusarPagamentoUseCase(pagamentoRepository, eventStore);
+        var orcamento = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+        var pagamento = registrarPagamentoUseCase.executar(new RegistrarPagamentoUseCase.Command(
+                orcamento.ordemServicoId(),
+                orcamento.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+
+        var recusado = recusarPagamentoUseCase.executar(new RecusarPagamentoUseCase.Command(
+                pagamento.pagamentoId(),
+                "mercado-pago",
+                "Cartao recusado")).join();
+
+        assertEquals(StatusPagamento.RECUSADO, recusado.status());
+        assertEquals("mercado-pago", recusado.provedor());
+        assertTrue(eventStore.listarOutbox().stream().anyMatch(event ->
+                event.eventType().equals("pagamentoRecusado")
+                        && event.payload().get("motivo").equals("Cartao recusado")));
+
+        var erroEstado = assertFutureThrows(BusinessException.class, () ->
+                recusarPagamentoUseCase.executar(new RecusarPagamentoUseCase.Command(
+                        recusado.pagamentoId(),
+                        "mercado-pago",
+                        "Nova tentativa")));
+        assertEquals("INVALID_STATE_TRANSITION", erroEstado.code());
+    }
+
+    @Test
+    void deveFalharAoRecusarPagamentoInexistente() {
+        var service = new RecusarPagamentoUseCase(new InMemoryPagamentoDataSourceAdapter(), eventStore);
+
+        assertFutureThrows(ResourceNotFoundException.class, () ->
+                service.executar(new RecusarPagamentoUseCase.Command(
+                        UUID.randomUUID(),
+                        "mercado-pago",
+                        "Pagamento inexistente")));
+    }
+
+    @Test
+    void deveCancelarPagamentoCriadoERejeitarEstadoInvalido() {
+        var pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var registrarPagamentoUseCase = registrarPagamentoUseCase(pagamentoRepository, gatewayNaoIntegrado());
+        var cancelarPagamentoUseCase = new CancelarPagamentoUseCase(pagamentoRepository);
+        var orcamento = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+        var pagamento = registrarPagamentoUseCase.executar(new RegistrarPagamentoUseCase.Command(
+                orcamento.ordemServicoId(),
+                orcamento.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+
+        var cancelado = cancelarPagamentoUseCase.executar(
+                new CancelarPagamentoUseCase.Command(pagamento.pagamentoId())).join();
+
+        assertEquals(StatusPagamento.CANCELADO, cancelado.status());
+
+        var erroEstado = assertFutureThrows(BusinessException.class, () ->
+                cancelarPagamentoUseCase.executar(new CancelarPagamentoUseCase.Command(cancelado.pagamentoId())));
+        assertEquals("INVALID_STATE_TRANSITION", erroEstado.code());
+    }
+
+    @Test
+    void deveFalharAoCancelarPagamentoInexistente() {
+        var service = new CancelarPagamentoUseCase(new InMemoryPagamentoDataSourceAdapter());
+
+        assertFutureThrows(
+                ResourceNotFoundException.class,
+                () -> service.executar(new CancelarPagamentoUseCase.Command(UUID.randomUUID())));
+    }
+
+    @Test
+    void deveCancelarSomentePagamentosCriadosDaOrdem() {
+        var pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var registrarPagamentoUseCase = registrarPagamentoUseCase(pagamentoRepository, gatewayNaoIntegrado());
+        var confirmarPagamentoUseCase = new ConfirmarPagamentoUseCase(pagamentoRepository, eventStore);
+        var cancelarPagamentosCriadosUseCase = new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository);
+        var ordemServicoId = UUID.randomUUID();
+        var primeiroOrcamento = aprovar(gerar(ordemServicoId).orcamentoId(), null);
+        var segundoOrcamento = aprovar(gerar(ordemServicoId).orcamentoId(), null);
+        var pagamentoCriado = registrarPagamentoUseCase.executar(new RegistrarPagamentoUseCase.Command(
+                ordemServicoId,
+                primeiroOrcamento.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+        var pagamentoConfirmado = registrarPagamentoUseCase.executar(new RegistrarPagamentoUseCase.Command(
+                ordemServicoId,
+                segundoOrcamento.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+        confirmarPagamentoUseCase.executar(new ConfirmarPagamentoUseCase.Command(
+                pagamentoConfirmado.pagamentoId(),
+                "mercado-pago",
+                "mp-confirmado-002")).join();
+
+        var cancelados = cancelarPagamentosCriadosUseCase.executar(
+                new CancelarPagamentosCriadosDaOrdemUseCase.Command(ordemServicoId)).join();
+
+        assertEquals(1, cancelados.size());
+        assertEquals(pagamentoCriado.pagamentoId(), cancelados.getFirst().pagamentoId());
+        assertEquals(StatusPagamento.CANCELADO, cancelados.getFirst().status());
+        var pagamentos = pagamentoRepository.findByOrdemServicoId(ordemServicoId).join();
+        assertEquals(2, pagamentos.size());
+        assertTrue(pagamentos.stream().anyMatch(pagamento ->
+                pagamento.pagamentoId().equals(pagamentoConfirmado.pagamentoId())
+                        && pagamento.status() == StatusPagamento.CONFIRMADO));
     }
 
     @Test
@@ -138,7 +311,7 @@ class PagamentoUseCaseTest {
 
     private <T extends Throwable> T assertFutureThrows(
             Class<T> expectedType,
-            Supplier<CompletableFuture<Pagamento>> executable) {
+            Supplier<CompletableFuture<?>> executable) {
         var exception = assertThrows(CompletionException.class, () -> executable.get().join());
         return assertInstanceOf(expectedType, exception.getCause());
     }
