@@ -2,6 +2,7 @@ package br.com.oficina.billing.framework.db;
 
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.interfaces.PagamentoRepository;
+import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.Comparator;
 import java.util.List;
@@ -10,6 +11,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
+@IfBuildProperty(name = "oficina.persistence.kind", stringValue = "memory")
 public class InMemoryPagamentoRepository implements PagamentoRepository {
     private final ConcurrentHashMap<UUID, Pagamento> storage = new ConcurrentHashMap<>();
 
