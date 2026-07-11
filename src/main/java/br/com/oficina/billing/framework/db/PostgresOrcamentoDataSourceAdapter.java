@@ -8,7 +8,7 @@ import br.com.oficina.billing.core.entities.ItemOrcamento;
 import br.com.oficina.billing.core.entities.Orcamento;
 import br.com.oficina.billing.core.entities.StatusOrcamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
-import br.com.oficina.billing.core.interfaces.OrcamentoRepository;
+import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
 import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.sql.Connection;
@@ -18,11 +18,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import javax.sql.DataSource;
 
 @ApplicationScoped
 @IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql", enableIfMissing = true)
-public class PostgresOrcamentoRepository implements OrcamentoRepository {
+public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGateway {
     private static final String UPSERT_ORCAMENTO = """
             INSERT INTO orcamento (
                 id,
@@ -77,12 +78,16 @@ public class PostgresOrcamentoRepository implements OrcamentoRepository {
 
     private final DataSource dataSource;
 
-    public PostgresOrcamentoRepository(DataSource dataSource) {
+    public PostgresOrcamentoDataSourceAdapter(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
     @Override
-    public Orcamento save(Orcamento orcamento) {
+    public CompletableFuture<Orcamento> save(Orcamento orcamento) {
+        return CompletableFuture.completedFuture(saveBlocking(orcamento));
+    }
+
+    private Orcamento saveBlocking(Orcamento orcamento) {
         try (var connection = dataSource.getConnection()) {
             var previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
@@ -103,7 +108,11 @@ public class PostgresOrcamentoRepository implements OrcamentoRepository {
     }
 
     @Override
-    public Optional<Orcamento> findById(UUID orcamentoId) {
+    public CompletableFuture<Optional<Orcamento>> findById(UUID orcamentoId) {
+        return CompletableFuture.completedFuture(findByIdBlocking(orcamentoId));
+    }
+
+    private Optional<Orcamento> findByIdBlocking(UUID orcamentoId) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(SELECT_ORCAMENTO_BY_ID)) {
             statement.setObject(1, orcamentoId);
@@ -119,7 +128,11 @@ public class PostgresOrcamentoRepository implements OrcamentoRepository {
     }
 
     @Override
-    public List<Orcamento> findByOrdemServicoId(UUID ordemServicoId) {
+    public CompletableFuture<List<Orcamento>> findByOrdemServicoId(UUID ordemServicoId) {
+        return CompletableFuture.completedFuture(findByOrdemServicoIdBlocking(ordemServicoId));
+    }
+
+    private List<Orcamento> findByOrdemServicoIdBlocking(UUID ordemServicoId) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(SELECT_ORCAMENTOS_BY_ORDEM)) {
             statement.setObject(1, ordemServicoId);

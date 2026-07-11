@@ -1,36 +1,38 @@
 package br.com.oficina.billing.framework.db;
 
 import br.com.oficina.billing.core.entities.Orcamento;
-import br.com.oficina.billing.core.interfaces.OrcamentoRepository;
+import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
 import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
 @IfBuildProperty(name = "oficina.persistence.kind", stringValue = "memory")
-public class InMemoryOrcamentoRepository implements OrcamentoRepository {
+public class InMemoryOrcamentoDataSourceAdapter implements OrcamentoRepositoryGateway {
     private final ConcurrentHashMap<UUID, Orcamento> storage = new ConcurrentHashMap<>();
 
     @Override
-    public Orcamento save(Orcamento orcamento) {
+    public CompletableFuture<Orcamento> save(Orcamento orcamento) {
         storage.put(orcamento.orcamentoId(), orcamento);
-        return orcamento;
+        return CompletableFuture.completedFuture(orcamento);
     }
 
     @Override
-    public Optional<Orcamento> findById(UUID orcamentoId) {
-        return Optional.ofNullable(storage.get(orcamentoId));
+    public CompletableFuture<Optional<Orcamento>> findById(UUID orcamentoId) {
+        return CompletableFuture.completedFuture(Optional.ofNullable(storage.get(orcamentoId)));
     }
 
     @Override
-    public List<Orcamento> findByOrdemServicoId(UUID ordemServicoId) {
-        return storage.values().stream()
+    public CompletableFuture<List<Orcamento>> findByOrdemServicoId(UUID ordemServicoId) {
+        var orcamentos = storage.values().stream()
                 .filter(orcamento -> orcamento.ordemServicoId().equals(ordemServicoId))
                 .sorted(Comparator.comparing(Orcamento::criadoEm))
                 .toList();
+        return CompletableFuture.completedFuture(orcamentos);
     }
 }

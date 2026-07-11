@@ -2,6 +2,8 @@ package br.com.oficina.billing.framework.messaging;
 
 import br.com.oficina.billing.core.entities.ItemOrcamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
+import br.com.oficina.billing.core.interfaces.gateway.FinanceiroSnapshotGateway;
+import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
 import br.com.oficina.billing.framework.observability.StructuredLog;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.math.BigDecimal;
@@ -14,11 +16,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 
 @ApplicationScoped
-public class BillingEventStore {
+public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEventSender {
     private static final Logger LOG = Logger.getLogger(BillingEventStore.class);
     private static final String PRODUCER = "oficina-billing-service";
 
@@ -26,12 +29,9 @@ public class BillingEventStore {
     private final Map<UUID, OutboxEventRecord> outboxEvents = new LinkedHashMap<>();
     private final LinkedHashSet<UUID> consumedEventIds = new LinkedHashSet<>();
 
-    public synchronized List<ItemOrcamento> snapshotFinanceiro(UUID ordemServicoId) {
-        var itens = itensPorOrdemServico.get(ordemServicoId);
-        if (itens == null) {
-            return List.of();
-        }
-        return List.copyOf(itens.values());
+    @Override
+    public CompletableFuture<List<ItemOrcamento>> snapshotFinanceiro(UUID ordemServicoId) {
+        return CompletableFuture.completedFuture(snapshotFinanceiroLocal(ordemServicoId));
     }
 
     public synchronized boolean registrarEventoConsumido(UUID eventId) {
@@ -48,7 +48,19 @@ public class BillingEventStore {
                 .put(item.itemId(), item);
     }
 
-    public synchronized OutboxEventRecord registrarOutbox(
+    @Override
+    public CompletableFuture<Void> registrarOutbox(
+            String aggregateId,
+            String eventType,
+            String topic,
+            Map<String, Object> payload,
+            String correlationId,
+            OffsetDateTime occurredAt) {
+        registrarOutboxRecord(aggregateId, eventType, topic, payload, correlationId, occurredAt);
+        return CompletableFuture.completedFuture(null);
+    }
+
+    private synchronized OutboxEventRecord registrarOutboxRecord(
             String aggregateId,
             String eventType,
             String topic,
@@ -75,6 +87,14 @@ public class BillingEventStore {
         outboxEvents.put(event.eventId(), event);
         logEvent("outbox event registered", event, "PENDING");
         return event;
+    }
+
+    private synchronized List<ItemOrcamento> snapshotFinanceiroLocal(UUID ordemServicoId) {
+        var itens = itensPorOrdemServico.get(ordemServicoId);
+        if (itens == null) {
+            return List.of();
+        }
+        return List.copyOf(itens.values());
     }
 
     public synchronized List<OutboxEventRecord> listarOutbox() {

@@ -1,6 +1,7 @@
 package br.com.oficina.billing.framework.messaging;
 
-import br.com.oficina.billing.core.usecases.PagamentoService;
+import br.com.oficina.billing.core.usecases.pagamento.CancelarPagamentosCriadosDaOrdemUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.SolicitarPagamentoDaOrdemUseCase;
 import br.com.oficina.billing.framework.observability.StructuredLog;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.List;
@@ -27,11 +28,16 @@ public class BillingEventConsumer {
             "sagaFinalizadaComSucesso");
 
     private final BillingEventStore store;
-    private final PagamentoService pagamentoService;
+    private final SolicitarPagamentoDaOrdemUseCase solicitarPagamentoDaOrdemUseCase;
+    private final CancelarPagamentosCriadosDaOrdemUseCase cancelarPagamentosCriadosDaOrdemUseCase;
 
-    public BillingEventConsumer(BillingEventStore store, PagamentoService pagamentoService) {
+    public BillingEventConsumer(
+            BillingEventStore store,
+            SolicitarPagamentoDaOrdemUseCase solicitarPagamentoDaOrdemUseCase,
+            CancelarPagamentosCriadosDaOrdemUseCase cancelarPagamentosCriadosDaOrdemUseCase) {
         this.store = store;
-        this.pagamentoService = pagamentoService;
+        this.solicitarPagamentoDaOrdemUseCase = solicitarPagamentoDaOrdemUseCase;
+        this.cancelarPagamentosCriadosDaOrdemUseCase = cancelarPagamentosCriadosDaOrdemUseCase;
     }
 
     public boolean consumir(DomainEventEnvelope envelope) {
@@ -56,8 +62,12 @@ public class BillingEventConsumer {
             case "pecaIncluidaNaOrdemDeServico" -> registrarPeca(envelope);
             case "servicoIncluidoNaOrdemDeServico" -> registrarServico(envelope);
             case "diagnosticoFinalizado" -> registrarDiagnostico(envelope);
-            case "ordemDeServicoFinalizada", "execucaoFinalizada" -> pagamentoService.solicitarPagamentoDaOrdem(ordemServicoId(envelope));
-            case "sagaCompensada" -> pagamentoService.cancelarPagamentosCriadosDaOrdem(ordemServicoId(envelope));
+            case "ordemDeServicoFinalizada", "execucaoFinalizada" ->
+                    solicitarPagamentoDaOrdemUseCase.executar(
+                            new SolicitarPagamentoDaOrdemUseCase.Command(ordemServicoId(envelope))).join();
+            case "sagaCompensada" ->
+                    cancelarPagamentosCriadosDaOrdemUseCase.executar(
+                            new CancelarPagamentosCriadosDaOrdemUseCase.Command(ordemServicoId(envelope))).join();
             case "ordemDeServicoCriada", "ordemDeServicoEntregue", "estoqueAcrescentado", "estoqueBaixado", "sagaFinalizadaComSucesso" -> {
                 // Eventos registrados apenas para idempotencia e auditoria local neste incremento.
             }

@@ -1,4 +1,4 @@
-package br.com.oficina.billing.core.interfaces;
+package br.com.oficina.billing.core.interfaces.gateway;
 
 import br.com.oficina.billing.core.entities.StatusPagamento;
 

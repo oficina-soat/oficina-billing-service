@@ -20,32 +20,32 @@ import org.junit.jupiter.api.Test;
 class InMemoryBillingRepositoryTest {
     @Test
     void devePersistirEConsultarOrcamentosPorIdEOrdemServicoOrdenadosPorCriacao() {
-        var repository = new InMemoryOrcamentoRepository();
+        var repository = new InMemoryOrcamentoDataSourceAdapter();
         var ordemServicoId = UUID.randomUUID();
         var primeiro = orcamento(UUID.randomUUID(), ordemServicoId, "2026-06-23T10:00:00Z");
         var segundo = orcamento(UUID.randomUUID(), ordemServicoId, "2026-06-23T10:05:00Z");
 
-        repository.save(segundo);
-        repository.save(primeiro);
+        repository.save(segundo).join();
+        repository.save(primeiro).join();
 
-        assertEquals(primeiro, repository.findById(primeiro.orcamentoId()).orElseThrow());
-        assertEquals(List.of(primeiro, segundo), repository.findByOrdemServicoId(ordemServicoId));
-        assertTrue(repository.findById(UUID.randomUUID()).isEmpty());
+        assertEquals(primeiro, repository.findById(primeiro.orcamentoId()).join().orElseThrow());
+        assertEquals(List.of(primeiro, segundo), repository.findByOrdemServicoId(ordemServicoId).join());
+        assertTrue(repository.findById(UUID.randomUUID()).join().isEmpty());
     }
 
     @Test
     void devePersistirEConsultarPagamentosPorIdOrdemServicoEOrcamento() {
-        var repository = new InMemoryPagamentoRepository();
+        var repository = new InMemoryPagamentoDataSourceAdapter();
         var ordemServicoId = UUID.randomUUID();
         var orcamentoId = UUID.randomUUID();
         var pagamento = pagamento(UUID.randomUUID(), ordemServicoId, orcamentoId, "2026-06-23T10:00:00Z");
 
-        repository.save(pagamento);
+        repository.save(pagamento).join();
 
-        assertEquals(pagamento, repository.findById(pagamento.pagamentoId()).orElseThrow());
-        assertEquals(List.of(pagamento), repository.findByOrdemServicoId(ordemServicoId));
-        assertEquals(pagamento, repository.findByOrcamentoId(orcamentoId).orElseThrow());
-        assertTrue(repository.findByOrcamentoId(UUID.randomUUID()).isEmpty());
+        assertEquals(pagamento, repository.findById(pagamento.pagamentoId()).join().orElseThrow());
+        assertEquals(List.of(pagamento), repository.findByOrdemServicoId(ordemServicoId).join());
+        assertEquals(pagamento, repository.findByOrcamentoId(orcamentoId).join().orElseThrow());
+        assertTrue(repository.findByOrcamentoId(UUID.randomUUID()).join().isEmpty());
     }
 
     private Orcamento orcamento(UUID orcamentoId, UUID ordemServicoId, String criadoEm) {

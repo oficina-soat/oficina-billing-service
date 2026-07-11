@@ -7,7 +7,7 @@ import static br.com.oficina.billing.framework.db.JdbcBillingRepositorySupport.u
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
-import br.com.oficina.billing.core.interfaces.PagamentoRepository;
+import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.sql.SQLException;
@@ -15,11 +15,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import javax.sql.DataSource;
 
 @ApplicationScoped
 @IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql", enableIfMissing = true)
-public class PostgresPagamentoRepository implements PagamentoRepository {
+public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGateway {
     private static final String UPSERT_PAGAMENTO = """
             INSERT INTO pagamento (
                 id,
@@ -69,12 +70,16 @@ public class PostgresPagamentoRepository implements PagamentoRepository {
 
     private final DataSource dataSource;
 
-    public PostgresPagamentoRepository(DataSource dataSource) {
+    public PostgresPagamentoDataSourceAdapter(DataSource dataSource) {
         this.dataSource = dataSource;
     }
 
     @Override
-    public Pagamento save(Pagamento pagamento) {
+    public CompletableFuture<Pagamento> save(Pagamento pagamento) {
+        return CompletableFuture.completedFuture(saveBlocking(pagamento));
+    }
+
+    private Pagamento saveBlocking(Pagamento pagamento) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(UPSERT_PAGAMENTO)) {
             statement.setObject(1, pagamento.pagamentoId());
@@ -95,12 +100,16 @@ public class PostgresPagamentoRepository implements PagamentoRepository {
     }
 
     @Override
-    public Optional<Pagamento> findById(UUID pagamentoId) {
-        return findOne(SELECT_PAGAMENTO_BY_ID, pagamentoId);
+    public CompletableFuture<Optional<Pagamento>> findById(UUID pagamentoId) {
+        return CompletableFuture.completedFuture(findOne(SELECT_PAGAMENTO_BY_ID, pagamentoId));
     }
 
     @Override
-    public List<Pagamento> findByOrdemServicoId(UUID ordemServicoId) {
+    public CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId) {
+        return CompletableFuture.completedFuture(findByOrdemServicoIdBlocking(ordemServicoId));
+    }
+
+    private List<Pagamento> findByOrdemServicoIdBlocking(UUID ordemServicoId) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(SELECT_PAGAMENTOS_BY_ORDEM)) {
             statement.setObject(1, ordemServicoId);
@@ -117,8 +126,8 @@ public class PostgresPagamentoRepository implements PagamentoRepository {
     }
 
     @Override
-    public Optional<Pagamento> findByOrcamentoId(UUID orcamentoId) {
-        return findOne(SELECT_PAGAMENTO_BY_ORCAMENTO, orcamentoId);
+    public CompletableFuture<Optional<Pagamento>> findByOrcamentoId(UUID orcamentoId) {
+        return CompletableFuture.completedFuture(findOne(SELECT_PAGAMENTO_BY_ORCAMENTO, orcamentoId));
     }
 
     private Optional<Pagamento> findOne(String sql, UUID id) {

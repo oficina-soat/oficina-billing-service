@@ -8,10 +8,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.StatusOrcamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
-import br.com.oficina.billing.core.usecases.OrcamentoService;
-import br.com.oficina.billing.core.usecases.PagamentoService;
-import br.com.oficina.billing.framework.db.InMemoryOrcamentoRepository;
-import br.com.oficina.billing.framework.db.InMemoryPagamentoRepository;
+import br.com.oficina.billing.core.interfaces.gateway.PagamentoGatewayResult;
+import br.com.oficina.billing.core.usecases.orcamento.AprovarOrcamentoUseCase;
+import br.com.oficina.billing.core.usecases.orcamento.GerarOrcamentoUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.CancelarPagamentosCriadosDaOrdemUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.ConfirmarPagamentoUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.ConsultarPagamentosDaOrdemServicoUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.RegistrarPagamentoUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.SolicitarPagamentoDaOrdemUseCase;
+import br.com.oficina.billing.framework.db.InMemoryOrcamentoDataSourceAdapter;
+import br.com.oficina.billing.framework.db.InMemoryPagamentoDataSourceAdapter;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -22,11 +28,25 @@ import org.junit.jupiter.api.Test;
 
 class BillingEventConsumerTest {
     private final BillingEventStore store = new BillingEventStore();
-    private final InMemoryOrcamentoRepository orcamentoRepository = new InMemoryOrcamentoRepository();
-    private final InMemoryPagamentoRepository pagamentoRepository = new InMemoryPagamentoRepository();
-    private final OrcamentoService orcamentoService = new OrcamentoService(orcamentoRepository, store);
-    private final PagamentoService pagamentoService = new PagamentoService(pagamentoRepository, orcamentoService, store);
-    private final BillingEventConsumer consumer = new BillingEventConsumer(store, pagamentoService);
+    private final InMemoryOrcamentoDataSourceAdapter orcamentoRepository = new InMemoryOrcamentoDataSourceAdapter();
+    private final InMemoryPagamentoDataSourceAdapter pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
+    private final GerarOrcamentoUseCase gerarOrcamentoUseCase =
+            new GerarOrcamentoUseCase(orcamentoRepository, store, store);
+    private final AprovarOrcamentoUseCase aprovarOrcamentoUseCase =
+            new AprovarOrcamentoUseCase(orcamentoRepository, store);
+    private final RegistrarPagamentoUseCase registrarPagamentoUseCase = new RegistrarPagamentoUseCase(
+            pagamentoRepository,
+            orcamentoRepository,
+            store,
+            pagamento -> java.util.concurrent.CompletableFuture.completedFuture(PagamentoGatewayResult.naoIntegrado()));
+    private final ConsultarPagamentosDaOrdemServicoUseCase consultarPagamentosDaOrdemServicoUseCase =
+            new ConsultarPagamentosDaOrdemServicoUseCase(pagamentoRepository);
+    private final ConfirmarPagamentoUseCase confirmarPagamentoUseCase =
+            new ConfirmarPagamentoUseCase(pagamentoRepository, store);
+    private final BillingEventConsumer consumer = new BillingEventConsumer(
+            store,
+            new SolicitarPagamentoDaOrdemUseCase(orcamentoRepository, pagamentoRepository, registrarPagamentoUseCase),
+            new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
     private final OutboxPublisher publisher = new OutboxPublisher(store);
 
     @Test
@@ -54,7 +74,7 @@ class BillingEventConsumerTest {
         assertTrue(consumer.consumir(eventoDiagnostico));
         assertFalse(consumer.consumir(eventoDiagnostico));
 
-        var orcamento = orcamentoService.gerar(ordemServicoId);
+        var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
 
         assertEquals(new BigDecimal("400.00"), orcamento.valorTotal());
         assertEquals(2, orcamento.itens().size());
@@ -67,8 +87,9 @@ class BillingEventConsumerTest {
     @Test
     void deveSolicitarPagamentoQuandoOrdemForFinalizada() {
         var ordemServicoId = UUID.randomUUID();
-        var orcamento = orcamentoService.gerar(ordemServicoId);
-        var aprovado = orcamentoService.aprovar(orcamento.orcamentoId(), "Aprovado pelo cliente");
+        var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
+        var aprovado = aprovarOrcamentoUseCase.executar(
+                new AprovarOrcamentoUseCase.Command(orcamento.orcamentoId(), "Aprovado pelo cliente")).join();
 
         assertEquals(StatusOrcamento.APROVADO, aprovado.status());
 
@@ -81,7 +102,8 @@ class BillingEventConsumerTest {
         assertTrue(consumer.consumir(eventoFinalizacao));
         assertFalse(consumer.consumir(eventoFinalizacao));
 
-        var pagamentos = pagamentoService.consultarPorOrdemServico(ordemServicoId);
+        var pagamentos = consultarPagamentosDaOrdemServicoUseCase.executar(
+                new ConsultarPagamentosDaOrdemServicoUseCase.Command(ordemServicoId)).join();
         assertEquals(1, pagamentos.size());
         assertEquals(StatusPagamento.CRIADO, pagamentos.getFirst().status());
         assertEquals(MetodoPagamento.PIX, pagamentos.getFirst().metodo());
@@ -93,10 +115,15 @@ class BillingEventConsumerTest {
     @Test
     void devePublicarEventosPendentesDaOutbox() {
         var ordemServicoId = UUID.randomUUID();
-        var orcamento = orcamentoService.gerar(ordemServicoId);
-        orcamentoService.aprovar(orcamento.orcamentoId(), null);
-        var pagamento = pagamentoService.registrar(ordemServicoId, orcamento.orcamentoId(), BigDecimal.ZERO, MetodoPagamento.PIX);
-        pagamentoService.confirmar(pagamento.pagamentoId(), "mercado-pago", "mp-test");
+        var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
+        aprovarOrcamentoUseCase.executar(new AprovarOrcamentoUseCase.Command(orcamento.orcamentoId(), null)).join();
+        var pagamento = registrarPagamentoUseCase.executar(new RegistrarPagamentoUseCase.Command(
+                ordemServicoId,
+                orcamento.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+        confirmarPagamentoUseCase.executar(
+                new ConfirmarPagamentoUseCase.Command(pagamento.pagamentoId(), "mercado-pago", "mp-test")).join();
 
         var publicados = publisher.publicarPendentes();
 

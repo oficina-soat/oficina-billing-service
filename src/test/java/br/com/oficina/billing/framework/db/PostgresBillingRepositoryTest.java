@@ -11,8 +11,8 @@ import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusOrcamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
-import br.com.oficina.billing.core.interfaces.OrcamentoRepository;
-import br.com.oficina.billing.core.interfaces.PagamentoRepository;
+import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
+import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 import io.quarkus.test.junit.QuarkusTest;
@@ -33,15 +33,15 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 @QuarkusTestResource(value = PostgresBillingRepositoryTest.PostgresResource.class, restrictToAnnotatedClass = true)
 class PostgresBillingRepositoryTest {
     @Inject
-    OrcamentoRepository orcamentoRepository;
+    OrcamentoRepositoryGateway orcamentoRepository;
 
     @Inject
-    PagamentoRepository pagamentoRepository;
+    PagamentoRepositoryGateway pagamentoRepository;
 
     @Test
     void devePersistirOrcamentoItensEPagamentoNoPostgreSQL() {
-        assertInstanceOf(PostgresOrcamentoRepository.class, orcamentoRepository);
-        assertInstanceOf(PostgresPagamentoRepository.class, pagamentoRepository);
+        assertInstanceOf(PostgresOrcamentoDataSourceAdapter.class, orcamentoRepository);
+        assertInstanceOf(PostgresPagamentoDataSourceAdapter.class, pagamentoRepository);
 
         var ordemServicoId = UUID.randomUUID();
         var orcamentoId = UUID.randomUUID();
@@ -74,19 +74,19 @@ class PostgresBillingRepositoryTest {
                 criadoEm,
                 atualizadoEm);
 
-        orcamentoRepository.save(orcamento);
+        orcamentoRepository.save(orcamento).join();
 
-        var salvo = orcamentoRepository.findById(orcamentoId).orElseThrow();
+        var salvo = orcamentoRepository.findById(orcamentoId).join().orElseThrow();
         assertEquals(orcamentoId, salvo.orcamentoId());
         assertEquals(ordemServicoId, salvo.ordemServicoId());
         assertEquals(StatusOrcamento.GERADO, salvo.status());
         assertEquals(new BigDecimal("190.00"), salvo.valorTotal());
         assertEquals(2, salvo.itens().size());
         assertEquals(referenciaCatalogoId, salvo.itens().getFirst().referenciaCatalogoId());
-        assertEquals(List.of(orcamentoId), orcamentoRepository.findByOrdemServicoId(ordemServicoId).stream()
+        assertEquals(List.of(orcamentoId), orcamentoRepository.findByOrdemServicoId(ordemServicoId).join().stream()
                 .map(Orcamento::orcamentoId)
                 .toList());
-        assertTrue(orcamentoRepository.findById(UUID.randomUUID()).isEmpty());
+        assertTrue(orcamentoRepository.findById(UUID.randomUUID()).join().isEmpty());
 
         var aprovado = new Orcamento(
                 orcamentoId,
@@ -96,8 +96,8 @@ class PostgresBillingRepositoryTest {
                 StatusOrcamento.APROVADO,
                 salvo.criadoEm(),
                 OffsetDateTime.now(ZoneOffset.UTC));
-        orcamentoRepository.save(aprovado);
-        assertEquals(StatusOrcamento.APROVADO, orcamentoRepository.findById(orcamentoId).orElseThrow().status());
+        orcamentoRepository.save(aprovado).join();
+        assertEquals(StatusOrcamento.APROVADO, orcamentoRepository.findById(orcamentoId).join().orElseThrow().status());
 
         var pagamentoId = UUID.randomUUID();
         var pagamento = new Pagamento(
@@ -112,15 +112,15 @@ class PostgresBillingRepositoryTest {
                 criadoEm,
                 atualizadoEm);
 
-        pagamentoRepository.save(pagamento);
+        pagamentoRepository.save(pagamento).join();
 
-        var pagamentoSalvo = pagamentoRepository.findById(pagamentoId).orElseThrow();
+        var pagamentoSalvo = pagamentoRepository.findById(pagamentoId).join().orElseThrow();
         assertEquals(StatusPagamento.CRIADO, pagamentoSalvo.status());
-        assertEquals(pagamentoId, pagamentoRepository.findByOrcamentoId(orcamentoId).orElseThrow().pagamentoId());
-        assertEquals(List.of(pagamentoId), pagamentoRepository.findByOrdemServicoId(ordemServicoId).stream()
+        assertEquals(pagamentoId, pagamentoRepository.findByOrcamentoId(orcamentoId).join().orElseThrow().pagamentoId());
+        assertEquals(List.of(pagamentoId), pagamentoRepository.findByOrdemServicoId(ordemServicoId).join().stream()
                 .map(Pagamento::pagamentoId)
                 .toList());
-        assertTrue(pagamentoRepository.findById(UUID.randomUUID()).isEmpty());
+        assertTrue(pagamentoRepository.findById(UUID.randomUUID()).join().isEmpty());
 
         var confirmado = new Pagamento(
                 pagamentoId,
@@ -133,9 +133,9 @@ class PostgresBillingRepositoryTest {
                 "mp-postgres-test",
                 pagamentoSalvo.criadoEm(),
                 OffsetDateTime.now(ZoneOffset.UTC));
-        pagamentoRepository.save(confirmado);
+        pagamentoRepository.save(confirmado).join();
 
-        var pagamentoConfirmado = pagamentoRepository.findById(pagamentoId).orElseThrow();
+        var pagamentoConfirmado = pagamentoRepository.findById(pagamentoId).join().orElseThrow();
         assertEquals(StatusPagamento.CONFIRMADO, pagamentoConfirmado.status());
         assertEquals("mercado-pago", pagamentoConfirmado.provedor());
         assertEquals("mp-postgres-test", pagamentoConfirmado.transacaoExternaId());

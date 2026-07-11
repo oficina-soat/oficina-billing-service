@@ -1,6 +1,12 @@
-package br.com.oficina.billing.interfaces.controllers;
+package br.com.oficina.billing.framework.web;
 
+import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
+
+import br.com.oficina.billing.interfaces.controllers.StatusController;
+import br.com.oficina.billing.interfaces.presenters.view_model.StatusViewModel;
+import io.smallrye.mutiny.Uni;
 import jakarta.annotation.security.PermitAll;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -13,6 +19,9 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 @Path("/api/v1/status")
 @Produces(MediaType.APPLICATION_JSON)
 public class StatusResource {
+    @Inject
+    StatusController statusController;
+
     @ConfigProperty(name = "quarkus.application.name")
     String applicationName;
 
@@ -21,17 +30,14 @@ public class StatusResource {
 
     @GET
     @PermitAll
-    public StatusResponse status() {
-        return new StatusResponse(applicationName, environment, "UP");
+    public Uni<StatusViewModel> status() {
+        return toUni(() -> statusController.status(new StatusController.StatusRequest(applicationName, environment, "UP")));
     }
 
     @POST
     @PermitAll
     @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
-    public StatusResponse mutatingStatusProbe() {
+    public Uni<StatusViewModel> mutatingStatusProbe() {
         return status();
-    }
-
-    public record StatusResponse(String service, String environment, String status) {
     }
 }
