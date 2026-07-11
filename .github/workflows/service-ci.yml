@@ -80,6 +80,96 @@ jobs:
           echo "SERVICE_NAME=${service_name}" >>"${GITHUB_ENV}"
           echo "MAVEN_PROFILE=${maven_profile}" >>"${GITHUB_ENV}"
 
+      - name: Validate publishable version bump
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          extract_version() {
+            sed -n '0,/<version>[[:space:]]*/{
+              s/.*<version>[[:space:]]*\([^<][^<]*\)[[:space:]]*<\/version>.*/\1/p
+            }' "$1" | head -n 1
+          }
+
+          semver_gt() {
+            local current="$1"
+            local base="$2"
+            local current_major current_minor current_patch
+            local base_major base_minor base_patch
+
+            [[ "${current}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+            [[ "${base}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+
+            IFS=. read -r current_major current_minor current_patch <<<"${current}"
+            IFS=. read -r base_major base_minor base_patch <<<"${base}"
+
+            if (( current_major != base_major )); then
+              (( current_major > base_major ))
+              return
+            fi
+
+            if (( current_minor != base_minor )); then
+              (( current_minor > base_minor ))
+              return
+            fi
+
+            (( current_patch > base_patch ))
+          }
+
+          is_publish_relevant_path() {
+            local path="$1"
+
+            case "${path}" in
+              .github/*|*.md|docs/*)
+                return 1
+                ;;
+              *)
+                return 0
+                ;;
+            esac
+          }
+
+          current_version="$(extract_version pom.xml)"
+          if [[ -z "${current_version}" ]]; then
+            echo "Nao foi possivel identificar project.version em pom.xml" >&2
+            exit 1
+          fi
+
+          base_sha="${{ github.event.pull_request.base.sha }}"
+          if ! git show "${base_sha}:pom.xml" > /tmp/base-pom.xml 2>/dev/null; then
+            echo "Nao foi possivel ler pom.xml da base do PR: ${base_sha}" >&2
+            exit 1
+          fi
+
+          base_version="$(extract_version /tmp/base-pom.xml)"
+          if [[ -z "${base_version}" ]]; then
+            echo "Nao foi possivel identificar project.version na base do PR" >&2
+            exit 1
+          fi
+
+          publish_relevant_change=false
+          while IFS= read -r changed_path; do
+            if is_publish_relevant_path "${changed_path}"; then
+              publish_relevant_change=true
+              break
+            fi
+          done < <(git diff --name-only "${base_sha}" "${GITHUB_SHA}")
+
+          if [[ "${publish_relevant_change}" == true && "${current_version}" == *-SNAPSHOT ]]; then
+            echo "Mudanca publicavel em PR para main nao pode usar versao SNAPSHOT: ${current_version}" >&2
+            exit 1
+          fi
+
+          if [[ "${publish_relevant_change}" == true ]] && ! semver_gt "${current_version}" "${base_version}"; then
+            printf '%s\n\n%s\n%s\n\n%s\n' \
+              "Mudanca publicavel em PR para main exige incremento de project.version." \
+              "Versao da base: ${base_version}" \
+              "Versao atual: ${current_version}" \
+              "Use uma versao SemVer fechada MAJOR.MINOR.PATCH maior que a base." >&2
+            exit 1
+          fi
+
       - name: Ensure mvnw is executable
         run: chmod +x ./mvnw
 
@@ -176,11 +266,36 @@ jobs:
             }' "$1" | head -n 1
           }
 
+          semver_gt() {
+            local current="$1"
+            local base="$2"
+            local current_major current_minor current_patch
+            local base_major base_minor base_patch
+
+            [[ "${current}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+            [[ "${base}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+
+            IFS=. read -r current_major current_minor current_patch <<<"${current}"
+            IFS=. read -r base_major base_minor base_patch <<<"${base}"
+
+            if (( current_major != base_major )); then
+              (( current_major > base_major ))
+              return
+            fi
+
+            if (( current_minor != base_minor )); then
+              (( current_minor > base_minor ))
+              return
+            fi
+
+            (( current_patch > base_patch ))
+          }
+
           is_publish_relevant_path() {
             local path="$1"
 
             case "${path}" in
-              .github/*|README.md|docs/*)
+              .github/*|*.md|docs/*)
                 return 1
                 ;;
               *)
@@ -242,6 +357,7 @@ jobs:
           fi
 
           version_changed=false
+          version_incremented=false
           publish_relevant_change=false
           if [[ "${{ github.event_name }}" == "push" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
             if git show "${{ github.event.before }}:pom.xml" > /tmp/base-pom.xml 2>/dev/null; then
@@ -249,8 +365,12 @@ jobs:
               if [[ -n "${base_version}" && "${current_version}" != "${base_version}" ]]; then
                 version_changed=true
               fi
+              if [[ -n "${base_version}" ]] && semver_gt "${current_version}" "${base_version}"; then
+                version_incremented=true
+              fi
             else
               version_changed=true
+              version_incremented=true
             fi
 
             while IFS= read -r changed_path; do
@@ -261,6 +381,7 @@ jobs:
             done < <(git diff --name-only "${{ github.event.before }}" "${GITHUB_SHA}")
           elif [[ "${{ github.event_name }}" == "push" ]]; then
             version_changed=true
+            version_incremented=true
             publish_relevant_change=true
           fi
 
@@ -326,14 +447,16 @@ jobs:
 
           if [[ "${{ github.event_name }}" == "push" &&
                 "${publish_relevant_change}" == true &&
-                "${version_changed}" == false &&
-                ( "${need_build}" == true || "${need_release}" == true ) ]]; then
-            printf '%s\n\n%s\n%s\n%s\n\n%s\n' \
-              "Push em main exige nova publicacao, mas project.version nao mudou." \
+                "${version_incremented}" == false &&
+                ( "${publish_enabled}" == true || "${deploy_enabled}" == true ) ]]; then
+            printf '%s\n\n%s\n%s\n%s\n%s\n%s\n\n%s\n' \
+              "Push em main altera artefato publicavel, mas project.version nao foi incrementado." \
               "Versao atual: ${current_version}" \
+              "Publicacao habilitada: ${publish_enabled}" \
+              "Deploy habilitado: ${deploy_enabled}" \
               "Release existe: ${release_exists}" \
               "Imagem existe no ECR: ${image_exists}" \
-              "Incremente project.version em pom.xml antes de publicar novo build, release ou imagem." >&2
+              "Use uma versao SemVer fechada MAJOR.MINOR.PATCH maior que a base antes de publicar novo build, release ou deploy." >&2
             exit 1
           fi
 
