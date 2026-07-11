@@ -2,6 +2,7 @@ package br.com.oficina.billing.framework.messaging;
 
 import br.com.oficina.billing.core.entities.ItemOrcamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
+import br.com.oficina.billing.framework.observability.StructuredLog;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -13,9 +14,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.jboss.logging.Logger;
+import org.jboss.logging.MDC;
 
 @ApplicationScoped
 public class BillingEventStore {
+    private static final Logger LOG = Logger.getLogger(BillingEventStore.class);
     private static final String PRODUCER = "oficina-billing-service";
 
     private final Map<UUID, LinkedHashMap<UUID, ItemOrcamento>> itensPorOrdemServico = new LinkedHashMap<>();
@@ -52,6 +56,7 @@ public class BillingEventStore {
             String correlationId,
             OffsetDateTime occurredAt) {
         var now = OffsetDateTime.now(ZoneOffset.UTC);
+        var effectiveCorrelationId = correlationId(correlationId);
         var event = new OutboxEventRecord(
                 UUID.randomUUID(),
                 aggregateId,
@@ -61,13 +66,14 @@ public class BillingEventStore {
                 PRODUCER,
                 payload,
                 "PENDING",
-                correlationId,
+                effectiveCorrelationId,
                 occurredAt == null ? now : occurredAt,
                 now,
                 null,
                 0,
                 null);
         outboxEvents.put(event.eventId(), event);
+        logEvent("outbox event registered", event, "PENDING");
         return event;
     }
 
@@ -101,8 +107,32 @@ public class BillingEventStore {
                     null);
             outboxEvents.put(publicado.eventId(), publicado);
             publicados.add(publicado);
+            logEvent("outbox event published", publicado, "PUBLISHED");
         }
         return publicados;
+    }
+
+    private void logEvent(String message, OutboxEventRecord event, String messageStatus) {
+        StructuredLog.info(LOG, message, Map.of(
+                "correlationId", event.correlationId(),
+                "eventId", event.eventId().toString(),
+                "eventType", event.eventType(),
+                "eventVersion", event.eventVersion(),
+                "topic", event.topic(),
+                "producer", event.producer(),
+                "aggregateId", event.aggregateId(),
+                "messageStatus", messageStatus));
+    }
+
+    private String correlationId(String correlationId) {
+        if (correlationId != null && !correlationId.isBlank()) {
+            return correlationId.trim();
+        }
+        var mdcCorrelationId = MDC.get("correlationId");
+        if (mdcCorrelationId != null && !mdcCorrelationId.toString().isBlank()) {
+            return mdcCorrelationId.toString();
+        }
+        return "local-" + UUID.randomUUID();
     }
 
     public ItemOrcamento itemPeca(Map<String, Object> peca) {
