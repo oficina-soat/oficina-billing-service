@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -41,7 +40,8 @@ class MessagingRecordValidationTest {
         payload.put("status", "CONFIRMADO");
 
         assertEquals("CRIADO", envelope.payload().get("status"));
-        assertThrows(UnsupportedOperationException.class, () -> envelope.payload().put("novoCampo", "valor"));
+        var envelopePayload = envelope.payload();
+        assertThrows(UnsupportedOperationException.class, () -> envelopePayload.put("novoCampo", "valor"));
     }
 
     @Test
@@ -75,7 +75,8 @@ class MessagingRecordValidationTest {
         payload.put("status", "CONFIRMADO");
 
         assertEquals("CRIADO", outbox.payload().get("status"));
-        assertThrows(UnsupportedOperationException.class, () -> outbox.payload().put("novoCampo", "valor"));
+        var outboxPayload = outbox.payload();
+        assertThrows(UnsupportedOperationException.class, () -> outboxPayload.put("novoCampo", "valor"));
     }
 
     private DomainEventEnvelope envelope(
@@ -124,7 +125,6 @@ class MessagingRecordValidationTest {
     }
 
     private void assertOutboxInvalida(String mensagem, Executable executable) {
-        var erro = assertThrows(IllegalArgumentException.class, executable);
-        assertEquals(mensagem, erro.getMessage());
+        assertInvalido(mensagem, executable);
     }
 }

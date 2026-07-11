@@ -25,22 +25,22 @@ public record OutboxEventRecord(
         if (eventId == null) {
             throw new IllegalArgumentException("eventId da Outbox e obrigatorio.");
         }
-        if (aggregateId == null || aggregateId.isBlank()) {
+        if (isBlank(aggregateId)) {
             throw new IllegalArgumentException("aggregateId da Outbox e obrigatorio.");
         }
-        if (eventType == null || eventType.isBlank()) {
+        if (isBlank(eventType)) {
             throw new IllegalArgumentException("eventType da Outbox e obrigatorio.");
         }
         if (eventVersion <= 0) {
             throw new IllegalArgumentException("eventVersion da Outbox deve ser positivo.");
         }
-        if (topic == null || topic.isBlank()) {
+        if (isBlank(topic)) {
             throw new IllegalArgumentException("Topico da Outbox e obrigatorio.");
         }
-        if (producer == null || producer.isBlank()) {
+        if (isBlank(producer)) {
             throw new IllegalArgumentException("Producer da Outbox e obrigatorio.");
         }
-        if (status == null || status.isBlank()) {
+        if (isBlank(status)) {
             throw new IllegalArgumentException("Status da Outbox e obrigatorio.");
         }
         if (occurredAt == null || createdAt == null) {
@@ -50,5 +50,9 @@ public record OutboxEventRecord(
             throw new IllegalArgumentException("Tentativas da Outbox nao podem ser negativas.");
         }
         payload = Map.copyOf(payload == null ? Map.of() : new LinkedHashMap<>(payload));
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 }

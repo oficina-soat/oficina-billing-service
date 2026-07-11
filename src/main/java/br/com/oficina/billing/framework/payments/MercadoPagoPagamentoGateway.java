@@ -65,7 +65,7 @@ public class MercadoPagoPagamentoGateway implements PagamentoGateway {
                     "DEPENDENCY_FAILURE",
                     "Mercado Pago recusou a solicitacao de pagamento com HTTP "
                             + exception.getResponse().getStatus() + ".");
-        } catch (ProcessingException exception) {
+        } catch (ProcessingException _) {
             throw new BusinessException(
                     "DEPENDENCY_FAILURE",
                     "Falha de comunicacao com Mercado Pago ao solicitar pagamento.");

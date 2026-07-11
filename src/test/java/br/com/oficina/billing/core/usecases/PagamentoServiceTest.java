@@ -42,14 +42,18 @@ class PagamentoServiceTest {
     void deveRejeitarPagamentoQuandoOrcamentoNaoPertenceAOrdemOuNaoEstaAprovado() {
         var service = new PagamentoService(new InMemoryPagamentoRepository(), orcamentoService, eventStore);
         var orcamentoGerado = orcamentoService.gerar(UUID.randomUUID());
+        var ordemServicoId = orcamentoGerado.ordemServicoId();
+        var orcamentoId = orcamentoGerado.orcamentoId();
 
         var erroEstado = assertThrows(BusinessException.class, () ->
-                service.registrar(orcamentoGerado.ordemServicoId(), orcamentoGerado.orcamentoId(), BigDecimal.ZERO, MetodoPagamento.PIX));
+                service.registrar(ordemServicoId, orcamentoId, BigDecimal.ZERO, MetodoPagamento.PIX));
         assertEquals("INVALID_STATE_TRANSITION", erroEstado.code());
 
         var orcamentoAprovado = orcamentoService.aprovar(orcamentoService.gerar(UUID.randomUUID()).orcamentoId(), null);
+        var outraOrdemServicoId = UUID.randomUUID();
+        var orcamentoAprovadoId = orcamentoAprovado.orcamentoId();
         var erroOwnership = assertThrows(BusinessException.class, () ->
-                service.registrar(UUID.randomUUID(), orcamentoAprovado.orcamentoId(), BigDecimal.ZERO, MetodoPagamento.PIX));
+                service.registrar(outraOrdemServicoId, orcamentoAprovadoId, BigDecimal.ZERO, MetodoPagamento.PIX));
         assertEquals("BUSINESS_RULE_VIOLATION", erroOwnership.code());
     }
 
@@ -68,7 +72,8 @@ class PagamentoServiceTest {
     @Test
     void deveFalharAoConsultarPagamentoInexistente() {
         var service = new PagamentoService(new InMemoryPagamentoRepository(), orcamentoService, eventStore);
+        var pagamentoId = UUID.randomUUID();
 
-        assertThrows(ResourceNotFoundException.class, () -> service.consultar(UUID.randomUUID()));
+        assertThrows(ResourceNotFoundException.class, () -> service.consultar(pagamentoId));
     }
 }
