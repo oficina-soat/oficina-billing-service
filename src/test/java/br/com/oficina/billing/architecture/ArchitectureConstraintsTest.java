@@ -31,9 +31,9 @@ class ArchitectureConstraintsTest {
     private static final Pattern FRAMEWORK_IMPORT = Pattern.compile(
             "(?m)^import\\s+br\\.com\\.oficina\\.billing\\.framework\\.");
     private static final Pattern PUBLIC_INSTANCE_METHOD = Pattern.compile(
-            "(?m)^\\s+public\\s+(?!static\\b|record\\b|class\\b|interface\\b|enum\\b)([^\\s(]+(?:<[^\\n{;()]*>)?)\\s+([a-zA-Z_$][\\w$]*)\\s*\\(");
+            "(?m)^\\s+public\\s+(?!static\\b|record\\b|class\\b|interface\\b|enum\\b)(\\S+)\\s+([a-zA-Z_$][\\w$]*)\\s*\\(");
     private static final Pattern PUBLIC_RESOURCE_METHOD = Pattern.compile(
-            "(?m)^\\s+public\\s+(?!record\\b|class\\b|interface\\b|enum\\b)([^\\s(]+(?:<[^\\n{;()]*>)?)\\s+([a-zA-Z_$][\\w$]*)\\s*\\(");
+            "(?m)^\\s+public\\s+(?!record\\b|class\\b|interface\\b|enum\\b)(\\S+)\\s+([a-zA-Z_$][\\w$]*)\\s*\\(");
 
     @Test
     void deveManterLayoutComCoreInterfacesEFrameworkNaRaizDoServico() {

@@ -25,11 +25,14 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
 public class OrcamentoResource {
-    @Inject
-    OrcamentoController orcamentoController;
+    private final OrcamentoController orcamentoController;
+    private final OrcamentoPresenterAdapter orcamentoPresenter;
 
     @Inject
-    OrcamentoPresenterAdapter orcamentoPresenter;
+    public OrcamentoResource(OrcamentoController orcamentoController, OrcamentoPresenterAdapter orcamentoPresenter) {
+        this.orcamentoController = orcamentoController;
+        this.orcamentoPresenter = orcamentoPresenter;
+    }
 
     @POST
     @Path("/orcamentos")

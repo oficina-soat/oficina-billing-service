@@ -24,6 +24,8 @@ import org.jboss.logging.MDC;
 public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEventSender {
     private static final Logger LOG = Logger.getLogger(BillingEventStore.class);
     private static final String PRODUCER = "oficina-billing-service";
+    private static final String STATUS_PENDING = "PENDING";
+    private static final String STATUS_PUBLISHED = "PUBLISHED";
 
     private final Map<UUID, LinkedHashMap<UUID, ItemOrcamento>> itensPorOrdemServico = new LinkedHashMap<>();
     private final Map<UUID, OutboxEventRecord> outboxEvents = new LinkedHashMap<>();
@@ -77,7 +79,7 @@ public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEvent
                 topic,
                 PRODUCER,
                 payload,
-                "PENDING",
+                STATUS_PENDING,
                 effectiveCorrelationId,
                 occurredAt == null ? now : occurredAt,
                 now,
@@ -85,7 +87,7 @@ public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEvent
                 0,
                 null);
         outboxEvents.put(event.eventId(), event);
-        logEvent("outbox event registered", event, "PENDING");
+        logEvent("outbox event registered", event, STATUS_PENDING);
         return event;
     }
 
@@ -107,7 +109,7 @@ public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEvent
         var publicados = new ArrayList<OutboxEventRecord>();
         var now = OffsetDateTime.now(ZoneOffset.UTC);
         for (var event : new ArrayList<>(outboxEvents.values())) {
-            if (!"PENDING".equals(event.status())) {
+            if (!STATUS_PENDING.equals(event.status())) {
                 continue;
             }
             var publicado = new OutboxEventRecord(
@@ -118,7 +120,7 @@ public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEvent
                     event.topic(),
                     event.producer(),
                     event.payload(),
-                    "PUBLISHED",
+                    STATUS_PUBLISHED,
                     event.correlationId(),
                     event.occurredAt(),
                     event.createdAt(),
@@ -127,7 +129,7 @@ public class BillingEventStore implements FinanceiroSnapshotGateway, OutboxEvent
                     null);
             outboxEvents.put(publicado.eventId(), publicado);
             publicados.add(publicado);
-            logEvent("outbox event published", publicado, "PUBLISHED");
+            logEvent("outbox event published", publicado, STATUS_PUBLISHED);
         }
         return publicados;
     }

@@ -10,6 +10,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public class CancelarPagamentoUseCase {
+    private static final int TAMANHO_MAXIMO_MOTIVO = 200;
+
     private final PagamentoRepositoryGateway repository;
     private final Clock clock;
 
@@ -23,6 +25,7 @@ public class CancelarPagamentoUseCase {
     }
 
     public CompletableFuture<Pagamento> executar(Command command) {
+        validarMotivo(command.motivo());
         return repository.findById(command.pagamentoId())
                 .thenCompose(optional -> {
                     var pagamento = optional.orElseThrow(() ->
@@ -42,6 +45,17 @@ public class CancelarPagamentoUseCase {
                 });
     }
 
-    public record Command(UUID pagamentoId) {
+    private static void validarMotivo(String motivo) {
+        if (motivo != null && motivo.trim().length() > TAMANHO_MAXIMO_MOTIVO) {
+            throw new BusinessException(
+                    "VALIDATION_ERROR",
+                    "Motivo do cancelamento deve ter no maximo 200 caracteres.");
+        }
+    }
+
+    public record Command(UUID pagamentoId, String motivo) {
+        public Command(UUID pagamentoId) {
+            this(pagamentoId, null);
+        }
     }
 }

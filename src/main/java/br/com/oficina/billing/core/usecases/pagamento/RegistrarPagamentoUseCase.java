@@ -78,15 +78,13 @@ public class RegistrarPagamentoUseCase {
                             now);
                     return pagamentoGateway.solicitar(pagamento)
                             .thenCompose(resultadoGateway -> pagamentoRepository.save(pagamento)
-                                    .thenCompose(salvo -> PagamentoEventPayloads.registrarEvento(
+                                    .thenCompose(salvo -> PagamentoEventPayloads.registrarEvento(new PagamentoEventPayloads.Registro(
                                             outboxEventSender,
                                             salvo,
-                                            "pagamentoSolicitado",
-                                            "oficina.billing.pagamento-solicitado",
-                                            "solicitadoEm",
+                                            PagamentoEventPayloads.PAGAMENTO_SOLICITADO,
                                             now,
                                             null,
-                                            null)
+                                            null))
                                             .thenCompose(ignored ->
                                                     aplicarResultadoGateway(salvo, resultadoGateway))));
                 });
@@ -111,27 +109,23 @@ public class RegistrarPagamentoUseCase {
             Pagamento pagamento,
             PagamentoGatewayResult resultado) {
         if (resultado.status() == StatusPagamento.CONFIRMADO) {
-            return PagamentoEventPayloads.registrarEvento(
+            return PagamentoEventPayloads.registrarEvento(new PagamentoEventPayloads.Registro(
                     outboxEventSender,
                     pagamento,
-                    "pagamentoConfirmado",
-                    "oficina.billing.pagamento-confirmado",
-                    "confirmadoEm",
+                    PagamentoEventPayloads.PAGAMENTO_CONFIRMADO,
                     pagamento.atualizadoEm(),
                     resultado.provedor(),
-                    null)
+                    null))
                     .thenApply(ignored -> pagamento);
         }
         if (resultado.status() == StatusPagamento.RECUSADO) {
-            return PagamentoEventPayloads.registrarEvento(
+            return PagamentoEventPayloads.registrarEvento(new PagamentoEventPayloads.Registro(
                     outboxEventSender,
                     pagamento,
-                    "pagamentoRecusado",
-                    "oficina.billing.pagamento-recusado",
-                    "recusadoEm",
+                    PagamentoEventPayloads.PAGAMENTO_RECUSADO,
                     pagamento.atualizadoEm(),
                     resultado.provedor(),
-                    resultado.motivo())
+                    resultado.motivo()))
                     .thenApply(ignored -> pagamento);
         }
         return CompletableFuture.completedFuture(pagamento);
