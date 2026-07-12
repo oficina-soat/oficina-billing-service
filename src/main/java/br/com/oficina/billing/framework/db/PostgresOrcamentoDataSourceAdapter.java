@@ -158,11 +158,7 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
             for (var item : orcamento.itens()) {
                 statement.setString(2, item.tipo().name());
                 statement.setObject(3, item.itemId());
-                if (item.referenciaCatalogoId() == null) {
-                    statement.setNull(4, Types.OTHER);
-                } else {
-                    statement.setObject(4, item.referenciaCatalogoId());
-                }
+                statement.setObject(4, item.referenciaCatalogoId(), Types.OTHER);
                 statement.setString(5, item.nome());
                 statement.setBigDecimal(6, item.quantidade());
                 statement.setBigDecimal(7, item.valorUnitario());
