@@ -150,7 +150,7 @@ O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
 - `POST /api/v1/pagamentos/{pagamentoId}/recusa`
 - `POST /api/v1/pagamentos/{pagamentoId}/cancelamento`
 
-Os repositórios de orçamento, pagamento, projeção financeira, eventos consumidos e Outbox usam PostgreSQL por padrão, com migrations Flyway e seed limpo em `src/main/resources/db/migration/`. O modo em memória fica restrito ao profile de testes para validar domínio, controllers e transições de estado sem depender de banco externo. A publicação real em SNS/SQS permanece no backlog de mensageria.
+Os repositórios de orçamento, pagamento, projeção financeira, eventos consumidos e Outbox usam PostgreSQL por padrão, com migrations Flyway e seed limpo em `src/main/resources/db/migration/`. O modo em memória fica restrito ao profile de testes para validar domínio, controllers e transições de estado sem depender de banco externo. A publicação e o consumo reais em SNS/SQS são habilitados por configuração de mensageria.
 
 O serviço mantém uma projeção financeira local persistida por eventos, gera orçamento a partir do snapshot de peças e serviços da OS, registra eventos financeiros em Outbox PostgreSQL e possui consumer idempotente para os eventos de Saga definidos na plataforma.
 
@@ -227,10 +227,20 @@ Ela cobre:
 - consumo idempotente de eventos por `eventId`;
 - projeção financeira de itens recebidos por eventos de OS e Execution;
 - geração de Outbox para `orcamentoGerado`, `orcamentoAprovado`, `orcamentoRecusado`, `pagamentoSolicitado`, `pagamentoConfirmado` e `pagamentoRecusado`;
-- publicação local de pendentes, alterando status de `PENDING` para `PUBLISHED`.
+- publicação de pendentes no SNS canônico, com retry/backoff, status `PUBLISHED` após sucesso e `FAILED` quando tentativas são esgotadas;
+- consumo por filas SQS com delete somente após persistência da projeção, idempotência ou comando financeiro.
 
-A integração com SNS/SQS deve reutilizar essa fronteira de Outbox sem alterar os contratos de eventos.
+Configuração principal:
+
+- `OFICINA_MESSAGING_ENABLED`
+- `OFICINA_MESSAGING_ENDPOINT_OVERRIDE`, para LocalStack
+- `OFICINA_MESSAGING_PUBLISHER_BATCH_SIZE`
+- `OFICINA_MESSAGING_PUBLISHER_MAX_ATTEMPTS`
+- `OFICINA_MESSAGING_CONSUMER_MAX_MESSAGES`
+- `OFICINA_MESSAGING_CONSUMER_WAIT_TIME_SECONDS`
+
+Os nomes físicos de tópicos e filas seguem o padrão do `oficina-infra`: pontos do tópico canônico são trocados por hífen, e filas consumidoras usam `<topico>.<servico-consumidor>`. A validação local de publicação e consumo SNS/SQS fica em [SnsSqsMessagingIntegrationTest](src/test/java/br/com/oficina/billing/framework/messaging/SnsSqsMessagingIntegrationTest.java), com LocalStack via Testcontainers.
 
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main` e manter a documentação local atualizada conforme novos manifests, variáveis e evidências forem materializados. Em paralelo, segue no backlog técnico a conexão da Outbox à publicação real em SNS/SQS.
+O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main`, impedir fallback silencioso em runtime e manter a documentação local atualizada conforme novos manifests, variáveis e evidências forem materializados.

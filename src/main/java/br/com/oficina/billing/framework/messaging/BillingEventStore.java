@@ -5,6 +5,7 @@ import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.core.interfaces.gateway.FinanceiroSnapshotGateway;
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -21,6 +22,12 @@ public interface BillingEventStore extends FinanceiroSnapshotGateway, OutboxEven
     List<OutboxEventRecord> listarOutbox();
 
     List<OutboxEventRecord> publicarPendentes();
+
+    List<OutboxEventRecord> listarPendentesParaPublicacao(int limit);
+
+    OutboxEventRecord marcarPublicado(UUID eventId);
+
+    OutboxEventRecord marcarFalhaPublicacao(UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed);
 
     default ItemOrcamento itemPeca(Map<String, Object> peca) {
         var pecaId = uuid(peca.get("pecaId"));

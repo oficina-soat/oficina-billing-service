@@ -38,6 +38,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
     private static final String PRODUCER = "oficina-billing-service";
     private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_PUBLISHED = "PUBLISHED";
+    private static final String STATUS_FAILED = "FAILED";
     private static final TypeReference<Map<String, Object>> PAYLOAD_TYPE = new TypeReference<>() {
     };
 
@@ -126,6 +127,24 @@ public class PostgresBillingEventStore implements BillingEventStore {
             FOR UPDATE SKIP LOCKED
             """;
 
+    private static final String SELECT_PENDING_OUTBOX_FOR_PUBLICATION = """
+            SELECT id, aggregate_id, event_type, event_version, topic, producer, payload::text AS payload,
+                   status, correlation_id, occurred_at, created_at, published_at, attempts, last_error
+            FROM outbox_event
+            WHERE status = 'PENDING'
+              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+            ORDER BY created_at
+            LIMIT ?
+            """;
+
+    private static final String SELECT_OUTBOX_BY_ID_FOR_UPDATE = """
+            SELECT id, aggregate_id, event_type, event_version, topic, producer, payload::text AS payload,
+                   status, correlation_id, occurred_at, created_at, published_at, attempts, last_error
+            FROM outbox_event
+            WHERE id = ?
+            FOR UPDATE
+            """;
+
     private static final String MARK_OUTBOX_PUBLISHED = """
             UPDATE outbox_event
             SET status = ?,
@@ -133,6 +152,16 @@ public class PostgresBillingEventStore implements BillingEventStore {
                 attempts = ?,
                 last_error = NULL,
                 next_attempt_at = NULL
+            WHERE id = ?
+            """;
+
+    private static final String MARK_OUTBOX_FAILURE = """
+            UPDATE outbox_event
+            SET status = ?,
+                attempts = ?,
+                next_attempt_at = ?,
+                last_error = ?,
+                published_at = NULL
             WHERE id = ?
             """;
 
@@ -334,31 +363,80 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public List<OutboxEventRecord> publicarPendentes() {
-        return inTransaction(connection -> {
-            var pendentes = selectPendingOutbox(connection);
-            var publicados = new ArrayList<OutboxEventRecord>();
-            for (var event : pendentes) {
-                var publicado = new OutboxEventRecord(
-                        event.eventId(),
-                        event.aggregateId(),
-                        event.eventType(),
-                        event.eventVersion(),
-                        event.topic(),
-                        event.producer(),
-                        event.payload(),
-                        STATUS_PUBLISHED,
-                        event.correlationId(),
-                        event.occurredAt(),
-                        event.createdAt(),
-                        OffsetDateTime.now(ZoneOffset.UTC),
-                        event.attempts() + 1,
-                        null);
-                markPublished(connection, publicado);
-                publicados.add(publicado);
-                logEvent("outbox event published", publicado, STATUS_PUBLISHED);
+        return listarPendentesParaPublicacao(Integer.MAX_VALUE).stream()
+                .map(event -> marcarPublicado(event.eventId()))
+                .toList();
+    }
+
+    @Override
+    public List<OutboxEventRecord> listarPendentesParaPublicacao(int limit) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(SELECT_PENDING_OUTBOX_FOR_PUBLICATION)) {
+            statement.setObject(1, OffsetDateTime.now(ZoneOffset.UTC));
+            statement.setInt(2, Math.max(1, limit));
+            try (var resultSet = statement.executeQuery()) {
+                var records = new ArrayList<OutboxEventRecord>();
+                while (resultSet.next()) {
+                    records.add(toOutboxEvent(resultSet));
+                }
+                return List.copyOf(records);
             }
-            return List.copyOf(publicados);
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public OutboxEventRecord marcarPublicado(UUID eventId) {
+        var publicado = inTransaction(connection -> {
+            var event = selectOutboxByIdForUpdate(connection, eventId);
+            var updated = new OutboxEventRecord(
+                    event.eventId(),
+                    event.aggregateId(),
+                    event.eventType(),
+                    event.eventVersion(),
+                    event.topic(),
+                    event.producer(),
+                    event.payload(),
+                    STATUS_PUBLISHED,
+                    event.correlationId(),
+                    event.occurredAt(),
+                    event.createdAt(),
+                    OffsetDateTime.now(ZoneOffset.UTC),
+                    event.attempts() + 1,
+                    null);
+            markPublished(connection, updated);
+            return updated;
         });
+        logEvent("outbox event published", publicado, STATUS_PUBLISHED);
+        return publicado;
+    }
+
+    @Override
+    public OutboxEventRecord marcarFalhaPublicacao(UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed) {
+        var status = failed ? STATUS_FAILED : STATUS_PENDING;
+        var updated = inTransaction(connection -> {
+            var event = selectOutboxByIdForUpdate(connection, eventId);
+            var failure = new OutboxEventRecord(
+                    event.eventId(),
+                    event.aggregateId(),
+                    event.eventType(),
+                    event.eventVersion(),
+                    event.topic(),
+                    event.producer(),
+                    event.payload(),
+                    status,
+                    event.correlationId(),
+                    event.occurredAt(),
+                    event.createdAt(),
+                    null,
+                    event.attempts() + 1,
+                    lastError);
+            markFailure(connection, failure, failed ? null : nextAttemptAt);
+            return failure;
+        });
+        logEvent("outbox event publication failed", updated, status);
+        return updated;
     }
 
     private List<OutboxEventRecord> selectPendingOutbox(Connection connection) throws SQLException {
@@ -381,6 +459,29 @@ public class PostgresBillingEventStore implements BillingEventStore {
             statement.setInt(3, event.attempts());
             statement.setObject(4, event.eventId());
             statement.executeUpdate();
+        }
+    }
+
+    private void markFailure(Connection connection, OutboxEventRecord event, OffsetDateTime nextAttemptAt) throws SQLException {
+        try (var statement = connection.prepareStatement(MARK_OUTBOX_FAILURE)) {
+            statement.setString(1, event.status());
+            statement.setInt(2, event.attempts());
+            statement.setObject(3, nextAttemptAt);
+            statement.setString(4, event.lastError());
+            statement.setObject(5, event.eventId());
+            statement.executeUpdate();
+        }
+    }
+
+    private OutboxEventRecord selectOutboxByIdForUpdate(Connection connection, UUID eventId) throws SQLException {
+        try (var statement = connection.prepareStatement(SELECT_OUTBOX_BY_ID_FOR_UPDATE)) {
+            statement.setObject(1, eventId);
+            try (var resultSet = statement.executeQuery()) {
+                if (resultSet.next()) {
+                    return toOutboxEvent(resultSet);
+                }
+                throw new IllegalStateException("Evento de Outbox nao encontrado: " + eventId);
+            }
         }
     }
 

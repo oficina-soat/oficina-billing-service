@@ -114,32 +114,74 @@ public class InMemoryBillingEventStore implements BillingEventStore {
 
     @Override
     public synchronized List<OutboxEventRecord> publicarPendentes() {
-        var publicados = new ArrayList<OutboxEventRecord>();
+        return listarPendentesParaPublicacao(Integer.MAX_VALUE).stream()
+                .map(event -> marcarPublicado(event.eventId()))
+                .toList();
+    }
+
+    @Override
+    public synchronized List<OutboxEventRecord> listarPendentesParaPublicacao(int limit) {
+        return outboxEvents.values().stream()
+                .filter(event -> STATUS_PENDING.equals(event.status()))
+                .sorted(Comparator.comparing(OutboxEventRecord::createdAt))
+                .limit(Math.max(1, limit))
+                .toList();
+    }
+
+    @Override
+    public synchronized OutboxEventRecord marcarPublicado(UUID eventId) {
+        var event = buscarOutbox(eventId);
         var now = OffsetDateTime.now(ZoneOffset.UTC);
-        for (var event : new ArrayList<>(outboxEvents.values())) {
-            if (!STATUS_PENDING.equals(event.status())) {
-                continue;
-            }
-            var publicado = new OutboxEventRecord(
-                    event.eventId(),
-                    event.aggregateId(),
-                    event.eventType(),
-                    event.eventVersion(),
-                    event.topic(),
-                    event.producer(),
-                    event.payload(),
-                    STATUS_PUBLISHED,
-                    event.correlationId(),
-                    event.occurredAt(),
-                    event.createdAt(),
-                    now,
-                    event.attempts() + 1,
-                    null);
-            outboxEvents.put(publicado.eventId(), publicado);
-            publicados.add(publicado);
-            logEvent("outbox event published", publicado, STATUS_PUBLISHED);
+        var publicado = new OutboxEventRecord(
+                event.eventId(),
+                event.aggregateId(),
+                event.eventType(),
+                event.eventVersion(),
+                event.topic(),
+                event.producer(),
+                event.payload(),
+                STATUS_PUBLISHED,
+                event.correlationId(),
+                event.occurredAt(),
+                event.createdAt(),
+                now,
+                event.attempts() + 1,
+                null);
+        outboxEvents.put(publicado.eventId(), publicado);
+        logEvent("outbox event published", publicado, STATUS_PUBLISHED);
+        return publicado;
+    }
+
+    @Override
+    public synchronized OutboxEventRecord marcarFalhaPublicacao(UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed) {
+        var event = buscarOutbox(eventId);
+        var status = failed ? "FAILED" : STATUS_PENDING;
+        var failure = new OutboxEventRecord(
+                event.eventId(),
+                event.aggregateId(),
+                event.eventType(),
+                event.eventVersion(),
+                event.topic(),
+                event.producer(),
+                event.payload(),
+                status,
+                event.correlationId(),
+                event.occurredAt(),
+                event.createdAt(),
+                null,
+                event.attempts() + 1,
+                lastError);
+        outboxEvents.put(failure.eventId(), failure);
+        logEvent("outbox event publication failed", failure, status);
+        return failure;
+    }
+
+    private OutboxEventRecord buscarOutbox(UUID eventId) {
+        var event = outboxEvents.get(eventId);
+        if (event == null) {
+            throw new IllegalStateException("Evento de Outbox nao encontrado: " + eventId);
         }
-        return publicados;
+        return event;
     }
 
     private void logEvent(String message, OutboxEventRecord event, String messageStatus) {
