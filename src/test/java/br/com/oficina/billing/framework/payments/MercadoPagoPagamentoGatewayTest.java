@@ -9,6 +9,9 @@ import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
+import jakarta.ws.rs.ProcessingException;
+import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Response;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -70,6 +73,36 @@ class MercadoPagoPagamentoGatewayTest {
     }
 
     @Test
+    void deveMapearPagamentoPendenteComoCriado() {
+        var gateway = new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) ->
+                        new MercadoPagoPaymentResponse(777L, "pending", null),
+                true,
+                Optional.of("token-teste"),
+                "cliente.local@oficina.com");
+
+        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX)).join();
+
+        assertEquals(StatusPagamento.CRIADO, resultado.status());
+        assertEquals("777", resultado.transacaoExternaId());
+    }
+
+    @Test
+    void deveUsarDetalhePadraoParaPagamentoRecusadoSemMotivo() {
+        var gateway = new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) ->
+                        new MercadoPagoPaymentResponse(888L, "cancelled", " "),
+                true,
+                Optional.of("token-teste"),
+                "cliente.local@oficina.com");
+
+        var resultado = gateway.solicitar(pagamento(MetodoPagamento.PIX)).join();
+
+        assertEquals(StatusPagamento.RECUSADO, resultado.status());
+        assertEquals("Pagamento nao autorizado pelo Mercado Pago.", resultado.motivo());
+    }
+
+    @Test
     void deveExigirTokenQuandoMercadoPagoEstiverHabilitado() {
         var gateway = new MercadoPagoPagamentoGateway(
                 (authorization, idempotencyKey, request) -> new MercadoPagoPaymentResponse(1L, "pending", null),
@@ -97,6 +130,49 @@ class MercadoPagoPagamentoGatewayTest {
                 () -> gateway.solicitar(pagamento));
 
         assertEquals("DEPENDENCY_UNAVAILABLE", exception.code());
+    }
+
+    @Test
+    void deveRejeitarRespostaInvalidaDoMercadoPago() {
+        var gateway = new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) -> null,
+                true,
+                Optional.of("token-teste"),
+                "cliente.local@oficina.com");
+
+        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento(MetodoPagamento.PIX)));
+
+        assertEquals("DEPENDENCY_FAILURE", exception.code());
+    }
+
+    @Test
+    void deveMapearFalhaHttpDoMercadoPago() {
+        var gateway = new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) -> {
+                    throw new WebApplicationException(Response.status(Response.Status.BAD_GATEWAY).build());
+                },
+                true,
+                Optional.of("token-teste"),
+                "cliente.local@oficina.com");
+
+        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento(MetodoPagamento.PIX)));
+
+        assertEquals("DEPENDENCY_FAILURE", exception.code());
+    }
+
+    @Test
+    void deveMapearFalhaDeComunicacaoDoMercadoPago() {
+        var gateway = new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) -> {
+                    throw new ProcessingException("timeout");
+                },
+                true,
+                Optional.of("token-teste"),
+                "cliente.local@oficina.com");
+
+        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento(MetodoPagamento.PIX)));
+
+        assertEquals("DEPENDENCY_FAILURE", exception.code());
     }
 
     private Pagamento pagamento(MetodoPagamento metodo) {
