@@ -39,6 +39,7 @@ class ObservabilityEndpointTest {
                 .then()
                 .statusCode(200)
                 .body(not(emptyOrNullString()))
-                .body(containsString("# HELP"));
+                .body(containsString("# HELP"))
+                .body(containsString("payment_provider_enabled"));
     }
 }
