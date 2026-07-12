@@ -439,19 +439,6 @@ public class PostgresBillingEventStore implements BillingEventStore {
         return updated;
     }
 
-    private List<OutboxEventRecord> selectPendingOutbox(Connection connection) throws SQLException {
-        try (var statement = connection.prepareStatement(SELECT_PENDING_OUTBOX_FOR_UPDATE)) {
-            statement.setObject(1, OffsetDateTime.now(ZoneOffset.UTC));
-            try (var resultSet = statement.executeQuery()) {
-                var records = new ArrayList<OutboxEventRecord>();
-                while (resultSet.next()) {
-                    records.add(toOutboxEvent(resultSet));
-                }
-                return records;
-            }
-        }
-    }
-
     private void markPublished(Connection connection, OutboxEventRecord event) throws SQLException {
         try (var statement = connection.prepareStatement(MARK_OUTBOX_PUBLISHED)) {
             statement.setString(1, event.status());

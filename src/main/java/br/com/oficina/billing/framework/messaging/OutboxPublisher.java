@@ -80,7 +80,7 @@ public class OutboxPublisher {
     }
 
     private OffsetDateTime nextAttempt(int attempts) {
-        var multiplier = 1L << Math.min(10, Math.max(0, attempts - 1));
+        var multiplier = 1L << Math.clamp(attempts - 1, 0, 10);
         return OffsetDateTime.now(ZoneOffset.UTC).plusNanos(backoffBaseMs * multiplier * 1_000_000L);
     }
 

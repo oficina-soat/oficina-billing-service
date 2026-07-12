@@ -23,7 +23,7 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
             String requestId,
             OffsetDateTime expiresAt) {
         var agora = OffsetDateTime.now(ZoneOffset.UTC);
-        var record = new IdempotencyRecord(
+        var newRecord = new IdempotencyRecord(
                 scope,
                 key,
                 requestHash,
@@ -35,7 +35,7 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
                 agora,
                 agora,
                 expiresAt);
-        return records.computeIfAbsent(recordKey(scope, key), ignored -> record);
+        return records.computeIfAbsent(recordKey(scope, key), ignored -> newRecord);
     }
 
     @Override
