@@ -119,6 +119,56 @@ class BillingResourceTest {
     }
 
     @Test
+    void shouldReplayBudgetCreationAndRejectDivergentPayload() {
+        var ordemServicoId = UUID.randomUUID().toString();
+        var idempotencyKey = "orcamento-replay-" + UUID.randomUUID();
+        var requestBody = """
+                {
+                  "ordemServicoId": "%s"
+                }
+                """.formatted(ordemServicoId);
+
+        var orcamentoId = given()
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType("application/json")
+                .body(requestBody)
+                .when()
+                .post("/api/v1/orcamentos")
+                .then()
+                .statusCode(201)
+                .body("orcamentoId", notNullValue())
+                .extract()
+                .path("orcamentoId")
+                .toString();
+
+        given()
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType("application/json")
+                .body(requestBody)
+                .when()
+                .post("/api/v1/orcamentos")
+                .then()
+                .statusCode(201)
+                .body("orcamentoId", equalTo(orcamentoId))
+                .body("ordemServicoId", equalTo(ordemServicoId));
+
+        given()
+                .header("X-Idempotency-Key", idempotencyKey)
+                .contentType("application/json")
+                .body("""
+                        {
+                          "ordemServicoId": "%s"
+                        }
+                        """.formatted(UUID.randomUUID()))
+                .when()
+                .post("/api/v1/orcamentos")
+                .then()
+                .statusCode(409)
+                .body("code", equalTo("IDEMPOTENCY_CONFLICT"))
+                .body("message", equalTo("Chave de idempotencia reutilizada com payload divergente."));
+    }
+
+    @Test
     void shouldRejectPaymentForBudgetNotApproved() {
         var ordemServicoId = UUID.randomUUID().toString();
         var orcamentoId = criarOrcamento(ordemServicoId);

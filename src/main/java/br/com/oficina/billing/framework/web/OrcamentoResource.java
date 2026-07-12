@@ -5,6 +5,7 @@ import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
 import br.com.oficina.billing.interfaces.controllers.OrcamentoController;
 import br.com.oficina.billing.interfaces.presenters.OrcamentoPresenterAdapter;
 import br.com.oficina.billing.interfaces.presenters.view_model.OrcamentoViewModel;
+import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -24,6 +25,7 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 @Path("/api/v1")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
+@Blocking
 public class OrcamentoResource {
     private final OrcamentoController orcamentoController;
     private final OrcamentoPresenterAdapter orcamentoPresenter;

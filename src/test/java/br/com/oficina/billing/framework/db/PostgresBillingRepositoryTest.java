@@ -14,6 +14,8 @@ import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
+import br.com.oficina.billing.framework.idempotency.IdempotencyRecord.ProcessingStatus;
+import br.com.oficina.billing.framework.idempotency.PersistentIdempotencyStore;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
 import br.com.oficina.billing.framework.messaging.DomainEventEnvelope;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -212,6 +214,36 @@ class PostgresBillingRepositoryTest {
         assertTrue(restartedStore.listarOutbox().stream()
                 .filter(event -> event.eventId().equals(pendente.eventId()))
                 .allMatch(event -> event.status().equals("PUBLISHED") && event.publishedAt() != null));
+    }
+
+    @Test
+    void devePersistirRegistrosDeIdempotenciaNoPostgreSQL() {
+        var idempotencyStore = new PersistentIdempotencyStore(dataSource);
+        var record = idempotencyStore.createProcessing(
+                "oficina-billing-service:POST:/api/v1/orcamentos:anonymous",
+                "postgres-idempotency-001",
+                "hash-postgres-001",
+                "correlation-postgres-001",
+                "request-postgres-001",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(1));
+
+        assertEquals(ProcessingStatus.PROCESSING, record.processingStatus());
+
+        idempotencyStore.complete(
+                record.scope(),
+                record.key(),
+                ProcessingStatus.COMPLETED,
+                201,
+                "{\"orcamentoId\":\"orcamento-postgres-001\"}");
+
+        var reloaded = new PersistentIdempotencyStore(dataSource)
+                .find(record.scope(), record.key())
+                .orElseThrow();
+        assertEquals(ProcessingStatus.COMPLETED, reloaded.processingStatus());
+        assertEquals(201, reloaded.responseStatus());
+        assertEquals("{\"orcamentoId\":\"orcamento-postgres-001\"}", reloaded.responseBody());
+        assertEquals("correlation-postgres-001", reloaded.correlationId());
+        assertEquals("request-postgres-001", reloaded.requestId());
     }
 
     public static class PostgresRepositoryProfile implements QuarkusTestProfile {
