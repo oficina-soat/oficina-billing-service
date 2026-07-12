@@ -117,16 +117,6 @@ public class PostgresBillingEventStore implements BillingEventStore {
             ORDER BY created_at
             """;
 
-    private static final String SELECT_PENDING_OUTBOX_FOR_UPDATE = """
-            SELECT id, aggregate_id, event_type, event_version, topic, producer, payload::text AS payload,
-                   status, correlation_id, occurred_at, created_at, published_at, attempts, last_error
-            FROM outbox_event
-            WHERE status = 'PENDING'
-              AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-            ORDER BY created_at
-            FOR UPDATE SKIP LOCKED
-            """;
-
     private static final String SELECT_PENDING_OUTBOX_FOR_PUBLICATION = """
             SELECT id, aggregate_id, event_type, event_version, topic, producer, payload::text AS payload,
                    status, correlation_id, occurred_at, created_at, published_at, attempts, last_error
