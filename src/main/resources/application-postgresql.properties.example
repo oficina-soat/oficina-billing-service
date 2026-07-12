@@ -15,13 +15,19 @@ oficina.mercado-pago.payer-email=${OFICINA_MERCADO_PAGO_PAYER_EMAIL:cliente.loca
 quarkus.rest-client.mercado-pago-api.url=${OFICINA_MERCADO_PAGO_API_URL:https://api.mercadopago.com}
 
 %dev.quarkus.datasource.devservices.enabled=true
-%dev.quarkus.datasource.devservices.port=${DEV_POSTGRES_PORT:32771}
+%dev.quarkus.datasource.devservices.port=${DEV_POSTGRES_PORT:32772}
 %dev.quarkus.flyway.clean-at-start=true
 %dev.quarkus.flyway.migrate-at-start=true
 
-%test.quarkus.datasource.devservices.enabled=true
-%test.quarkus.flyway.clean-at-start=true
-%test.quarkus.flyway.migrate-at-start=true
+%test.oficina.persistence.kind=memory
+%test.quarkus.datasource.devservices.enabled=false
+%test.quarkus.datasource.active=false
+%test.quarkus.hibernate-orm.active=false
+%test.quarkus.flyway.active=false
+%test.quarkus.flyway.clean-at-start=false
+%test.quarkus.flyway.migrate-at-start=false
 
 %prod.quarkus.flyway.clean-at-start=false
 %prod.quarkus.flyway.migrate-at-start=true
+%lab.quarkus.flyway.clean-at-start=false
+%lab.quarkus.flyway.migrate-at-start=true

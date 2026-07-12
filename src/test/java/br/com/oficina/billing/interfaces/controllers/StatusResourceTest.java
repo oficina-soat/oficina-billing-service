@@ -19,7 +19,7 @@ class StatusResourceTest {
                 .statusCode(200)
                 .header("X-Correlation-Id", equalTo("test-correlation-id"))
                 .body("service", equalTo("oficina-billing-service"))
-                .body("environment", equalTo("lab"))
+                .body("environment", equalTo("test"))
                 .body("status", equalTo("UP"));
     }
 
@@ -42,7 +42,7 @@ class StatusResourceTest {
                 .then()
                 .statusCode(200)
                 .body("service", equalTo("oficina-billing-service"))
-                .body("environment", equalTo("lab"))
+                .body("environment", equalTo("test"))
                 .body("status", equalTo("UP"));
     }
 
@@ -55,7 +55,7 @@ class StatusResourceTest {
                 .then()
                 .statusCode(200)
                 .body("service", equalTo("oficina-billing-service"))
-                .body("environment", equalTo("lab"))
+                .body("environment", equalTo("test"))
                 .body("status", equalTo("UP"));
     }
 

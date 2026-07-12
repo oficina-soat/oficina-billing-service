@@ -10,6 +10,7 @@ import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.AwsSessionCredentials;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
@@ -25,7 +26,7 @@ import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sts.StsClient;
 
 @ApplicationScoped
-class AwsDomainMessagingClient {
+public class AwsDomainMessagingClient {
     private static final String LOCALSTACK_ACCOUNT_ID = "000000000000";
 
     private final String region;
@@ -40,16 +41,21 @@ class AwsDomainMessagingClient {
     AwsDomainMessagingClient(
             @ConfigProperty(name = "quarkus.application.name") String applicationName,
             @ConfigProperty(name = "AWS_REGION", defaultValue = "us-east-1") String region,
-            @ConfigProperty(name = "oficina.messaging.endpoint-override", defaultValue = "") String endpointOverride,
+            @ConfigProperty(name = "oficina.messaging.endpoint-override") Optional<String> endpointOverride,
             @ConfigProperty(name = "oficina.messaging.aws-account-id") Optional<String> configuredAccountId,
             @ConfigProperty(name = "oficina.messaging.aws-access-key-id") Optional<String> accessKeyId,
-            @ConfigProperty(name = "oficina.messaging.aws-secret-access-key") Optional<String> secretAccessKey) {
+            @ConfigProperty(name = "oficina.messaging.aws-secret-access-key") Optional<String> secretAccessKey,
+            @ConfigProperty(name = "oficina.messaging.aws-session-token") Optional<String> sessionToken) {
         this.region = region;
-        this.endpointOverride = endpointOverride;
+        this.endpointOverride = endpointOverride.orElse("");
         this.configuredAccountId = configuredAccountId.orElse("");
-        var credentialsProvider = credentialsProvider(accessKeyId.orElse(""), secretAccessKey.orElse(""), endpointOverride);
-        this.snsClient = snsClient(region, endpointOverride, credentialsProvider);
-        this.sqsClient = sqsClient(region, endpointOverride, credentialsProvider);
+        var credentialsProvider = credentialsProvider(
+                accessKeyId.orElse(""),
+                secretAccessKey.orElse(""),
+                sessionToken.orElse(""),
+                this.endpointOverride);
+        this.snsClient = snsClient(region, this.endpointOverride, credentialsProvider);
+        this.sqsClient = sqsClient(region, this.endpointOverride, credentialsProvider);
         this.stsClient = stsClient(region, credentialsProvider);
         if (!DomainMessagingRoutes.SERVICE_NAME.equals(applicationName)) {
             throw new IllegalStateException("Servico de mensageria configurado com nome invalido: " + applicationName);
@@ -79,6 +85,16 @@ class AwsDomainMessagingClient {
                 .queueUrl(queueUrl)
                 .receiptHandle(message.receiptHandle())
                 .build());
+    }
+
+    public void validateDependencies() {
+        accountId();
+        for (var topic : DomainMessagingRoutes.producedTopics()) {
+            snsClient.getTopicAttributes(builder -> builder.topicArn(topicArn(topic)));
+        }
+        for (var topic : DomainMessagingRoutes.consumedTopics()) {
+            queueUrl(topic);
+        }
     }
 
     @PreDestroy
@@ -127,12 +143,27 @@ class AwsDomainMessagingClient {
         return Map.copyOf(result);
     }
 
-    private static AwsCredentialsProvider credentialsProvider(String accessKeyId, String secretAccessKey, String endpointOverride) {
-        if (!accessKeyId.isBlank() && !secretAccessKey.isBlank()) {
-            return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey));
-        }
+    static AwsCredentialsProvider credentialsProvider(
+            String accessKeyId,
+            String secretAccessKey,
+            String sessionToken,
+            String endpointOverride) {
         if (!endpointOverride.isBlank()) {
             return StaticCredentialsProvider.create(AwsBasicCredentials.create("local", "local"));
+        }
+        var accessKeyConfigured = !accessKeyId.isBlank();
+        var secretKeyConfigured = !secretAccessKey.isBlank();
+        if (accessKeyConfigured != secretKeyConfigured || (!sessionToken.isBlank() && !accessKeyConfigured)) {
+            throw new IllegalArgumentException("Credenciais AWS estaticas incompletas.");
+        }
+        if (accessKeyConfigured && !sessionToken.isBlank()) {
+            return StaticCredentialsProvider.create(AwsSessionCredentials.create(
+                    accessKeyId,
+                    secretAccessKey,
+                    sessionToken));
+        }
+        if (accessKeyConfigured) {
+            return StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey));
         }
         return DefaultCredentialsProvider.create();
     }

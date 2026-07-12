@@ -19,7 +19,7 @@ import java.util.concurrent.CompletableFuture;
 import javax.sql.DataSource;
 
 @ApplicationScoped
-@IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql", enableIfMissing = true)
+@IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql")
 public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGateway {
     private static final String UPSERT_PAGAMENTO = """
             INSERT INTO pagamento (
