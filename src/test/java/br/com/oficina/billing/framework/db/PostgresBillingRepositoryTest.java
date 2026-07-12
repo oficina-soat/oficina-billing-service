@@ -1,6 +1,7 @@
 package br.com.oficina.billing.framework.db;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -13,6 +14,11 @@ import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
+import br.com.oficina.billing.framework.idempotency.IdempotencyRecord.ProcessingStatus;
+import br.com.oficina.billing.framework.idempotency.PersistentIdempotencyStore;
+import br.com.oficina.billing.framework.messaging.BillingEventStore;
+import br.com.oficina.billing.framework.messaging.DomainEventEnvelope;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.common.QuarkusTestResourceLifecycleManager;
 import io.quarkus.test.junit.QuarkusTest;
@@ -25,6 +31,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
@@ -37,6 +44,12 @@ class PostgresBillingRepositoryTest {
 
     @Inject
     PagamentoRepositoryGateway pagamentoRepository;
+
+    @Inject
+    BillingEventStore eventStore;
+
+    @Inject
+    DataSource dataSource;
 
     @Test
     void devePersistirOrcamentoItensEPagamentoNoPostgreSQL() {
@@ -139,6 +152,98 @@ class PostgresBillingRepositoryTest {
         assertEquals(StatusPagamento.CONFIRMADO, pagamentoConfirmado.status());
         assertEquals("mercado-pago", pagamentoConfirmado.provedor());
         assertEquals("mp-postgres-test", pagamentoConfirmado.transacaoExternaId());
+    }
+
+    @Test
+    void devePersistirProjecoesEventosConsumidosEOutboxNoPostgreSQL() {
+        assertInstanceOf(PostgresBillingEventStore.class, eventStore);
+
+        var ordemServicoId = UUID.randomUUID();
+        var itemId = UUID.randomUUID();
+        eventStore.registrarItem(ordemServicoId, new ItemOrcamento(
+                TipoItemOrcamento.SERVICO,
+                itemId,
+                itemId,
+                "Alinhamento",
+                BigDecimal.ONE,
+                new BigDecimal("120.00"),
+                new BigDecimal("120.00")));
+
+        var restartedStore = new PostgresBillingEventStore(dataSource, new ObjectMapper());
+        var snapshot = restartedStore.snapshotFinanceiro(ordemServicoId).join();
+        assertEquals(1, snapshot.size());
+        assertEquals(itemId, snapshot.getFirst().itemId());
+        assertEquals(new BigDecimal("120.00"), snapshot.getFirst().valorTotal());
+
+        var eventId = UUID.randomUUID();
+        var envelope = new DomainEventEnvelope(
+                eventId,
+                "diagnosticoFinalizado",
+                1,
+                OffsetDateTime.now(ZoneOffset.UTC),
+                "oficina-execution-service",
+                ordemServicoId.toString(),
+                Map.of("ordemServicoId", ordemServicoId.toString()));
+
+        assertTrue(eventStore.registrarEventoConsumido(envelope));
+        assertTrue(restartedStore.eventoConsumido(eventId));
+        assertFalse(restartedStore.registrarEventoConsumido(envelope));
+
+        eventStore.registrarOutbox(
+                ordemServicoId.toString(),
+                "pagamentoSolicitado",
+                "oficina.billing.pagamento-solicitado",
+                Map.of("ordemServicoId", ordemServicoId.toString(), "valor", new BigDecimal("120.00")),
+                "postgres-event-store-test",
+                OffsetDateTime.now(ZoneOffset.UTC)).join();
+
+        var pendente = restartedStore.listarOutbox().stream()
+                .filter(event -> event.correlationId().equals("postgres-event-store-test"))
+                .findFirst()
+                .orElseThrow();
+        assertEquals("PENDING", pendente.status());
+        assertEquals(new BigDecimal("120.00"), pendente.payload().get("valor"));
+
+        var publicados = restartedStore.publicarPendentes().stream()
+                .filter(event -> event.correlationId().equals("postgres-event-store-test"))
+                .toList();
+
+        assertEquals(1, publicados.size());
+        assertEquals("PUBLISHED", publicados.getFirst().status());
+        assertEquals(1, publicados.getFirst().attempts());
+        assertTrue(restartedStore.listarOutbox().stream()
+                .filter(event -> event.eventId().equals(pendente.eventId()))
+                .allMatch(event -> event.status().equals("PUBLISHED") && event.publishedAt() != null));
+    }
+
+    @Test
+    void devePersistirRegistrosDeIdempotenciaNoPostgreSQL() {
+        var idempotencyStore = new PersistentIdempotencyStore(dataSource);
+        var record = idempotencyStore.createProcessing(
+                "oficina-billing-service:POST:/api/v1/orcamentos:anonymous",
+                "postgres-idempotency-001",
+                "hash-postgres-001",
+                "correlation-postgres-001",
+                "request-postgres-001",
+                OffsetDateTime.now(ZoneOffset.UTC).plusDays(1));
+
+        assertEquals(ProcessingStatus.PROCESSING, record.processingStatus());
+
+        idempotencyStore.complete(
+                record.scope(),
+                record.key(),
+                ProcessingStatus.COMPLETED,
+                201,
+                "{\"orcamentoId\":\"orcamento-postgres-001\"}");
+
+        var reloaded = new PersistentIdempotencyStore(dataSource)
+                .find(record.scope(), record.key())
+                .orElseThrow();
+        assertEquals(ProcessingStatus.COMPLETED, reloaded.processingStatus());
+        assertEquals(201, reloaded.responseStatus());
+        assertEquals("{\"orcamentoId\":\"orcamento-postgres-001\"}", reloaded.responseBody());
+        assertEquals("correlation-postgres-001", reloaded.correlationId());
+        assertEquals("request-postgres-001", reloaded.requestId());
     }
 
     public static class PostgresRepositoryProfile implements QuarkusTestProfile {

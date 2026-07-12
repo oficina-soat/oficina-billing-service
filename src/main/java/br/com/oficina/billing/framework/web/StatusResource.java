@@ -4,6 +4,7 @@ import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
 
 import br.com.oficina.billing.interfaces.controllers.StatusController;
 import br.com.oficina.billing.interfaces.presenters.view_model.StatusViewModel;
+import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
 import jakarta.annotation.security.PermitAll;
 import jakarta.inject.Inject;
@@ -18,6 +19,7 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 
 @Path("/api/v1/status")
 @Produces(MediaType.APPLICATION_JSON)
+@Blocking
 public class StatusResource {
     private final StatusController statusController;
     private final String applicationName;

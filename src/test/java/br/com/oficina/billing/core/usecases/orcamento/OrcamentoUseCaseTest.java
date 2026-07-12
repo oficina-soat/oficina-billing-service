@@ -13,6 +13,7 @@ import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
 import br.com.oficina.billing.framework.db.InMemoryOrcamentoDataSourceAdapter;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
+import br.com.oficina.billing.framework.messaging.InMemoryBillingEventStore;
 import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -21,7 +22,7 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 class OrcamentoUseCaseTest {
-    private final BillingEventStore eventStore = new BillingEventStore();
+    private final BillingEventStore eventStore = new InMemoryBillingEventStore();
     private final InMemoryOrcamentoDataSourceAdapter repository = new InMemoryOrcamentoDataSourceAdapter();
     private final GerarOrcamentoUseCase gerarOrcamentoUseCase =
             new GerarOrcamentoUseCase(repository, eventStore, eventStore);

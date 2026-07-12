@@ -17,6 +17,7 @@ import br.com.oficina.billing.core.usecases.orcamento.GerarOrcamentoUseCase;
 import br.com.oficina.billing.framework.db.InMemoryOrcamentoDataSourceAdapter;
 import br.com.oficina.billing.framework.db.InMemoryPagamentoDataSourceAdapter;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
+import br.com.oficina.billing.framework.messaging.InMemoryBillingEventStore;
 import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -25,7 +26,7 @@ import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 class PagamentoUseCaseTest {
-    private final BillingEventStore eventStore = new BillingEventStore();
+    private final BillingEventStore eventStore = new InMemoryBillingEventStore();
     private final InMemoryOrcamentoDataSourceAdapter orcamentoRepository = new InMemoryOrcamentoDataSourceAdapter();
     private final GerarOrcamentoUseCase gerarOrcamentoUseCase =
             new GerarOrcamentoUseCase(orcamentoRepository, eventStore, eventStore);

@@ -5,6 +5,7 @@ import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
 import br.com.oficina.billing.interfaces.controllers.PagamentoController;
 import br.com.oficina.billing.interfaces.presenters.PagamentoPresenterAdapter;
 import br.com.oficina.billing.interfaces.presenters.view_model.PagamentoViewModel;
+import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -24,6 +25,7 @@ import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
 @Path("/api/v1")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
+@Blocking
 public class PagamentoResource {
     private final PagamentoController pagamentoController;
     private final PagamentoPresenterAdapter pagamentoPresenter;

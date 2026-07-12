@@ -17,6 +17,15 @@ final class JdbcBillingRepositorySupport {
 
     static OffsetDateTime offsetDateTime(ResultSet resultSet, String column) throws SQLException {
         var value = resultSet.getObject(column);
+        return toOffsetDateTime(value, column);
+    }
+
+    static OffsetDateTime nullableOffsetDateTime(ResultSet resultSet, String column) throws SQLException {
+        var value = resultSet.getObject(column);
+        return value == null ? null : toOffsetDateTime(value, column);
+    }
+
+    private static OffsetDateTime toOffsetDateTime(Object value, String column) throws SQLException {
         if (value instanceof OffsetDateTime offsetDateTime) {
             return offsetDateTime;
         }
