@@ -84,7 +84,7 @@ public class OutboxPublisher {
     }
 
     static long retryMultiplier(int attempts) {
-        var retryIndex = Math.clamp((long) attempts - 1L, 0L, 10L);
+        var retryIndex = Math.clamp(attempts - 1L, 0L, 10L);
         return 1L << retryIndex;
     }
 
