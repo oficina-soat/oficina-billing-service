@@ -80,8 +80,12 @@ public class OutboxPublisher {
     }
 
     private OffsetDateTime nextAttempt(int attempts) {
-        var multiplier = 1L << Math.clamp(attempts - 1, 0, 10);
-        return OffsetDateTime.now(ZoneOffset.UTC).plusNanos(backoffBaseMs * multiplier * 1_000_000L);
+        return OffsetDateTime.now(ZoneOffset.UTC).plusNanos(backoffBaseMs * retryMultiplier(attempts) * 1_000_000L);
+    }
+
+    static long retryMultiplier(int attempts) {
+        var retryIndex = Math.clamp((long) attempts - 1L, 0L, 10L);
+        return 1L << retryIndex;
     }
 
     private static String rootMessage(Throwable throwable) {
