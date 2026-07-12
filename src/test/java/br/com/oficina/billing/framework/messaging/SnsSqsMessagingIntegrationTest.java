@@ -1,5 +1,6 @@
 package br.com.oficina.billing.framework.messaging;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,6 +30,14 @@ class SnsSqsMessagingIntegrationTest {
 
     @Inject
     SqsDomainEventConsumer sqsConsumer;
+
+    @Inject
+    AwsDomainMessagingClient messagingClient;
+
+    @Test
+    void deveValidarTopicosSnsEFilasSqsObrigatorios() {
+        assertDoesNotThrow(messagingClient::validateDependencies);
+    }
 
     @Test
     void devePublicarOutboxNoSnsEEntregarNaFilaConsumidora() throws Exception {

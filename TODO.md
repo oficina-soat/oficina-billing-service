@@ -15,7 +15,8 @@
 - [x] Implementar integração opcional de pagamento PIX com Mercado Pago.
 - [x] Substituir repositórios em memória por adapters PostgreSQL.
 - [x] Persistir projeções financeiras, eventos consumidos e Outbox no PostgreSQL.
-- [ ] Conectar a Outbox à publicação real em SNS/SQS.
+- [x] Conectar a Outbox à publicação real em SNS/SQS.
+- [x] Impedir fallback para memória e validar dependências obrigatórias no startup de `prod` e `lab`.
 - [x] Criar testes unitários, de integração e de contrato para APIs, persistência, eventos, idempotência e fluxos financeiros da Saga.
 - [x] Configurar cobertura mínima de 80% com JaCoCo e evidência no README/CI, conforme [Padrão BDD, Cobertura e Qualidade](../oficina-platform/docs/delivery/bdd-testing.md).
 - [x] Validar contratos OpenAPI, schemas JSON de eventos, erro padronizado, idempotência e Saga.

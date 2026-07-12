@@ -15,7 +15,7 @@ public class PersistentIdempotencyStore implements IdempotencyStore {
 
     @Inject
     public PersistentIdempotencyStore(
-            @ConfigProperty(name = "oficina.persistence.kind", defaultValue = "postgresql") String persistenceKind,
+            @ConfigProperty(name = "oficina.persistence.kind") String persistenceKind,
             Instance<DataSource> dataSources) {
         this.delegate = createDelegate(persistenceKind, dataSources);
     }
@@ -25,10 +25,11 @@ public class PersistentIdempotencyStore implements IdempotencyStore {
     }
 
     private IdempotencyStore createDelegate(String persistenceKind, Instance<DataSource> dataSources) {
-        if ("memory".equalsIgnoreCase(persistenceKind)) {
-            return new InMemoryIdempotencyStore();
-        }
-        return new PostgresIdempotencyStore(dataSources.get());
+        return switch (persistenceKind.toLowerCase(java.util.Locale.ROOT)) {
+            case "memory" -> new InMemoryIdempotencyStore();
+            case "postgresql" -> new PostgresIdempotencyStore(dataSources.get());
+            default -> throw new IllegalStateException("Tipo de persistencia nao suportado: " + persistenceKind);
+        };
     }
 
     @Override

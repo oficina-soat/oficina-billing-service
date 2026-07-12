@@ -102,10 +102,11 @@ class OutboxPublisherTest {
             super(
                     DomainMessagingRoutes.SERVICE_NAME,
                     "us-east-1",
-                    "http://localhost:4566",
+                    Optional.of("http://localhost:4566"),
                     Optional.of("000000000000"),
                     Optional.of("test"),
-                    Optional.of("test"));
+                    Optional.of("test"),
+                    Optional.empty());
         }
 
         @Override

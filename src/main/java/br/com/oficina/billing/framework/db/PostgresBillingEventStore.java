@@ -32,7 +32,7 @@ import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 
 @ApplicationScoped
-@IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql", enableIfMissing = true)
+@IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql")
 public class PostgresBillingEventStore implements BillingEventStore {
     private static final Logger LOG = Logger.getLogger(PostgresBillingEventStore.class);
     private static final String PRODUCER = "oficina-billing-service";

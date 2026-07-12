@@ -39,6 +39,10 @@ final class DomainMessagingRoutes {
         return List.copyOf(CONSUMED_TOPICS.values());
     }
 
+    static List<String> producedTopics() {
+        return List.copyOf(PRODUCED_TOPICS.values());
+    }
+
     static String queueName(String topic) {
         return physicalName(topic + "." + SERVICE_NAME);
     }
