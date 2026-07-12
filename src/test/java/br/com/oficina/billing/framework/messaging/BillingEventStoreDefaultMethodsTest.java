@@ -45,11 +45,14 @@ class BillingEventStoreDefaultMethodsTest {
 
     @Test
     void deveRejeitarPayloadSemCamposObrigatorios() {
-        assertThrows(IllegalArgumentException.class, () -> store.itemPeca(Map.of("nome", "Filtro")));
-        assertThrows(IllegalArgumentException.class, () -> store.itemServico(Map.of(
+        var payloadPeca = Map.<String, Object>of("nome", "Filtro");
+        var payloadServico = Map.<String, Object>of(
                 "servicoId", UUID.randomUUID(),
                 "nome", "Servico",
                 "valorUnitario", "10.00",
-                "valorTotal", "10.00")));
+                "valorTotal", "10.00");
+
+        assertThrows(IllegalArgumentException.class, () -> store.itemPeca(payloadPeca));
+        assertThrows(IllegalArgumentException.class, () -> store.itemServico(payloadServico));
     }
 }
