@@ -139,8 +139,9 @@ class MercadoPagoPagamentoGatewayTest {
                 true,
                 Optional.of("token-teste"),
                 "cliente.local@oficina.com");
+        var pagamento = pagamento(MetodoPagamento.PIX);
 
-        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento(MetodoPagamento.PIX)));
+        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento));
 
         assertEquals("DEPENDENCY_FAILURE", exception.code());
     }
@@ -154,8 +155,9 @@ class MercadoPagoPagamentoGatewayTest {
                 true,
                 Optional.of("token-teste"),
                 "cliente.local@oficina.com");
+        var pagamento = pagamento(MetodoPagamento.PIX);
 
-        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento(MetodoPagamento.PIX)));
+        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento));
 
         assertEquals("DEPENDENCY_FAILURE", exception.code());
     }
@@ -169,8 +171,9 @@ class MercadoPagoPagamentoGatewayTest {
                 true,
                 Optional.of("token-teste"),
                 "cliente.local@oficina.com");
+        var pagamento = pagamento(MetodoPagamento.PIX);
 
-        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento(MetodoPagamento.PIX)));
+        var exception = assertThrows(BusinessException.class, () -> gateway.solicitar(pagamento));
 
         assertEquals("DEPENDENCY_FAILURE", exception.code());
     }

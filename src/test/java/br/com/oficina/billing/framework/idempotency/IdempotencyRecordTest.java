@@ -13,29 +13,29 @@ class IdempotencyRecordTest {
 
     @Test
     void deveValidarCamposObrigatorios() {
-        assertInvalido("Escopo de idempotencia e obrigatorio.", () -> record(null, "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
-        assertInvalido("Escopo de idempotencia e obrigatorio.", () -> record(" ", "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
-        assertInvalido("Chave de idempotencia e obrigatoria.", () -> record("scope", null, "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
-        assertInvalido("Chave de idempotencia e obrigatoria.", () -> record("scope", " ", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
-        assertInvalido("Hash da requisicao idempotente e obrigatorio.", () -> record("scope", "key", null, ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
-        assertInvalido("Hash da requisicao idempotente e obrigatorio.", () -> record("scope", "key", " ", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
-        assertInvalido("Status da requisicao idempotente e obrigatorio.", () -> record("scope", "key", "hash", null, "corr", NOW, NOW, NOW));
-        assertInvalido("CorrelationId da requisicao idempotente e obrigatorio.", () -> record("scope", "key", "hash", ProcessingStatus.PROCESSING, null, NOW, NOW, NOW));
-        assertInvalido("CorrelationId da requisicao idempotente e obrigatorio.", () -> record("scope", "key", "hash", ProcessingStatus.PROCESSING, " ", NOW, NOW, NOW));
-        assertInvalido("Datas da requisicao idempotente sao obrigatorias.", () -> record("scope", "key", "hash", ProcessingStatus.PROCESSING, "corr", null, NOW, NOW));
-        assertInvalido("Datas da requisicao idempotente sao obrigatorias.", () -> record("scope", "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, null, NOW));
-        assertInvalido("Datas da requisicao idempotente sao obrigatorias.", () -> record("scope", "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, null));
+        assertInvalido("Escopo de idempotencia e obrigatorio.", () -> idempotencyRecord(null, "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
+        assertInvalido("Escopo de idempotencia e obrigatorio.", () -> idempotencyRecord(" ", "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
+        assertInvalido("Chave de idempotencia e obrigatoria.", () -> idempotencyRecord("scope", null, "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
+        assertInvalido("Chave de idempotencia e obrigatoria.", () -> idempotencyRecord("scope", " ", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
+        assertInvalido("Hash da requisicao idempotente e obrigatorio.", () -> idempotencyRecord("scope", "key", null, ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
+        assertInvalido("Hash da requisicao idempotente e obrigatorio.", () -> idempotencyRecord("scope", "key", " ", ProcessingStatus.PROCESSING, "corr", NOW, NOW, NOW));
+        assertInvalido("Status da requisicao idempotente e obrigatorio.", () -> idempotencyRecord("scope", "key", "hash", null, "corr", NOW, NOW, NOW));
+        assertInvalido("CorrelationId da requisicao idempotente e obrigatorio.", () -> idempotencyRecord("scope", "key", "hash", ProcessingStatus.PROCESSING, null, NOW, NOW, NOW));
+        assertInvalido("CorrelationId da requisicao idempotente e obrigatorio.", () -> idempotencyRecord("scope", "key", "hash", ProcessingStatus.PROCESSING, " ", NOW, NOW, NOW));
+        assertInvalido("Datas da requisicao idempotente sao obrigatorias.", () -> idempotencyRecord("scope", "key", "hash", ProcessingStatus.PROCESSING, "corr", null, NOW, NOW));
+        assertInvalido("Datas da requisicao idempotente sao obrigatorias.", () -> idempotencyRecord("scope", "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, null, NOW));
+        assertInvalido("Datas da requisicao idempotente sao obrigatorias.", () -> idempotencyRecord("scope", "key", "hash", ProcessingStatus.PROCESSING, "corr", NOW, NOW, null));
     }
 
     @Test
     void deveCriarRegistroValido() {
-        var record = record("scope", "key", "hash", ProcessingStatus.COMPLETED, "corr", NOW, NOW, NOW.plusDays(1));
+        var idempotencyRecord = idempotencyRecord("scope", "key", "hash", ProcessingStatus.COMPLETED, "corr", NOW, NOW, NOW.plusDays(1));
 
-        assertEquals("scope", record.scope());
-        assertEquals(ProcessingStatus.COMPLETED, record.processingStatus());
+        assertEquals("scope", idempotencyRecord.scope());
+        assertEquals(ProcessingStatus.COMPLETED, idempotencyRecord.processingStatus());
     }
 
-    private static IdempotencyRecord record(
+    private static IdempotencyRecord idempotencyRecord(
             String scope,
             String key,
             String requestHash,

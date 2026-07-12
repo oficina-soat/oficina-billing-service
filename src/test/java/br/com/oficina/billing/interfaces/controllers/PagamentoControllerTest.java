@@ -30,16 +30,32 @@ class PagamentoControllerTest {
         var controller = controller(new RecordingRegistrarPagamentoUseCase());
         var ordemServicoId = UUID.randomUUID();
         var orcamentoId = UUID.randomUUID();
+        var requestSemOrdem = new PagamentoController.PagamentoCreateRequest(
+                null,
+                orcamentoId,
+                BigDecimal.TEN,
+                MetodoPagamento.PIX);
+        var requestSemOrcamento = new PagamentoController.PagamentoCreateRequest(
+                ordemServicoId,
+                null,
+                BigDecimal.TEN,
+                MetodoPagamento.PIX);
+        var requestSemValor = new PagamentoController.PagamentoCreateRequest(
+                ordemServicoId,
+                orcamentoId,
+                null,
+                MetodoPagamento.PIX);
+        var requestSemMetodo = new PagamentoController.PagamentoCreateRequest(
+                ordemServicoId,
+                orcamentoId,
+                BigDecimal.TEN,
+                null);
 
         assertThrows(BusinessException.class, () -> controller.registrarPagamento(null));
-        assertThrows(BusinessException.class, () -> controller.registrarPagamento(
-                new PagamentoController.PagamentoCreateRequest(null, orcamentoId, BigDecimal.TEN, MetodoPagamento.PIX)));
-        assertThrows(BusinessException.class, () -> controller.registrarPagamento(
-                new PagamentoController.PagamentoCreateRequest(ordemServicoId, null, BigDecimal.TEN, MetodoPagamento.PIX)));
-        assertThrows(BusinessException.class, () -> controller.registrarPagamento(
-                new PagamentoController.PagamentoCreateRequest(ordemServicoId, orcamentoId, null, MetodoPagamento.PIX)));
-        assertThrows(BusinessException.class, () -> controller.registrarPagamento(
-                new PagamentoController.PagamentoCreateRequest(ordemServicoId, orcamentoId, BigDecimal.TEN, null)));
+        assertThrows(BusinessException.class, () -> controller.registrarPagamento(requestSemOrdem));
+        assertThrows(BusinessException.class, () -> controller.registrarPagamento(requestSemOrcamento));
+        assertThrows(BusinessException.class, () -> controller.registrarPagamento(requestSemValor));
+        assertThrows(BusinessException.class, () -> controller.registrarPagamento(requestSemMetodo));
     }
 
     @Test

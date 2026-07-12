@@ -72,12 +72,12 @@ class IdempotencyKeyFilterTest {
         filter.filter(request.proxy());
         filter.filter(request.proxy(), ResponseContextStub.of(201, Map.of("ok", true)));
 
-        var record = request.record();
+        var idempotencyRecord = request.idempotencyRecord();
         assertNull(request.aborted);
-        assertEquals("chave-billing", record.key());
-        assertTrue(record.scope().contains("/pagamentos"));
-        assertEquals("corr-billing", record.correlationId());
-        assertEquals("req-billing", record.requestId());
+        assertEquals("chave-billing", idempotencyRecord.key());
+        assertTrue(idempotencyRecord.scope().contains("/pagamentos"));
+        assertEquals("corr-billing", idempotencyRecord.correlationId());
+        assertEquals("req-billing", idempotencyRecord.requestId());
         assertEquals(ProcessingStatus.COMPLETED, store.completion.processingStatus);
         assertEquals(201, store.completion.responseStatus);
         assertTrue(store.completion.responseBody.contains("\"ok\":true"));
@@ -90,8 +90,8 @@ class IdempotencyKeyFilterTest {
                 .header(IdempotencyKeyFilter.HEADER_NAME, "replay")
                 .entity("{\"a\":1}");
         filter.filter(request.proxy());
-        var saved = request.record();
-        store.existing = record(saved, ProcessingStatus.COMPLETED, 202, "{\"status\":\"ok\"}");
+        var saved = request.idempotencyRecord();
+        store.existing = idempotencyRecord(saved, ProcessingStatus.COMPLETED, 202, "{\"status\":\"ok\"}");
 
         var replay = RequestContextStub.post("pagamentos")
                 .header(IdempotencyKeyFilter.HEADER_NAME, "replay")
@@ -109,7 +109,7 @@ class IdempotencyKeyFilterTest {
                 .header(IdempotencyKeyFilter.HEADER_NAME, "duplicada")
                 .entity("{\"valor\":10}");
         filter.filter(original.proxy());
-        store.existing = original.record();
+        store.existing = original.idempotencyRecord();
 
         var divergente = RequestContextStub.post("orcamentos")
                 .header(IdempotencyKeyFilter.HEADER_NAME, "duplicada")
@@ -126,7 +126,7 @@ class IdempotencyKeyFilterTest {
                 .header(IdempotencyKeyFilter.HEADER_NAME, "processando")
                 .entity("{\"valor\":10}");
         filter.filter(request.proxy());
-        store.existing = record(request.record(), ProcessingStatus.PROCESSING, null, null);
+        store.existing = idempotencyRecord(request.idempotencyRecord(), ProcessingStatus.PROCESSING, null, null);
 
         var retry = RequestContextStub.post("orcamentos")
                 .header(IdempotencyKeyFilter.HEADER_NAME, "processando")
@@ -144,7 +144,7 @@ class IdempotencyKeyFilterTest {
                 .header(IdempotencyKeyFilter.HEADER_NAME, "retryable")
                 .entity("{\"valor\":10}");
         filter.filter(request.proxy());
-        store.existing = record(request.record(), ProcessingStatus.FAILED_RETRYABLE, 503, "falhou");
+        store.existing = idempotencyRecord(request.idempotencyRecord(), ProcessingStatus.FAILED_RETRYABLE, 503, "falhou");
 
         var retry = RequestContextStub.post("orcamentos")
                 .header(IdempotencyKeyFilter.HEADER_NAME, "retryable")
@@ -152,7 +152,7 @@ class IdempotencyKeyFilterTest {
         filter.filter(retry.proxy());
 
         assertNull(retry.aborted);
-        assertEquals(ProcessingStatus.FAILED_RETRYABLE, retry.record().processingStatus());
+        assertEquals(ProcessingStatus.FAILED_RETRYABLE, retry.idempotencyRecord().processingStatus());
     }
 
     @Test
@@ -181,15 +181,15 @@ class IdempotencyKeyFilterTest {
 
         filter.filter(request.proxy());
 
-        var record = request.record();
+        var idempotencyRecord = request.idempotencyRecord();
         assertNull(request.aborted);
-        assertEquals("legado", record.key());
-        assertTrue(record.scope().endsWith("/:anonymous"));
-        assertNotNull(record.correlationId());
-        assertNotNull(record.requestId());
+        assertEquals("legado", idempotencyRecord.key());
+        assertTrue(idempotencyRecord.scope().endsWith("/:anonymous"));
+        assertNotNull(idempotencyRecord.correlationId());
+        assertNotNull(idempotencyRecord.requestId());
     }
 
-    private static IdempotencyRecord record(
+    private static IdempotencyRecord idempotencyRecord(
             IdempotencyRecord source,
             ProcessingStatus status,
             Integer responseStatus,
@@ -341,7 +341,7 @@ class IdempotencyKeyFilterTest {
             return IdempotencyKeyFilterTest.proxy(ContainerRequestContext.class, handler);
         }
 
-        IdempotencyRecord record() {
+        IdempotencyRecord idempotencyRecord() {
             return properties.values().stream()
                     .filter(IdempotencyRecord.class::isInstance)
                     .map(IdempotencyRecord.class::cast)
