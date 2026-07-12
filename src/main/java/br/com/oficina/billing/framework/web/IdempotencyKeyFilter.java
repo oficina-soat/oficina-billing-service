@@ -44,14 +44,19 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
     private static final String RECORD_PROPERTY = IdempotencyKeyFilter.class.getName() + ".record";
     private static final Set<String> MUTATING_METHODS = Set.of(HttpMethod.POST, HttpMethod.PUT, "PATCH");
 
-    @Inject
-    IdempotencyStore store;
+    private final IdempotencyStore store;
+    private final ObjectMapper objectMapper;
+    private final String serviceName;
 
     @Inject
-    ObjectMapper objectMapper;
-
-    @ConfigProperty(name = "quarkus.application.name")
-    String serviceName;
+    public IdempotencyKeyFilter(
+            IdempotencyStore store,
+            ObjectMapper objectMapper,
+            @ConfigProperty(name = "quarkus.application.name") String serviceName) {
+        this.store = store;
+        this.objectMapper = objectMapper;
+        this.serviceName = serviceName;
+    }
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
@@ -96,8 +101,8 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
 
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) throws IOException {
-        var record = requestContext.getProperty(RECORD_PROPERTY);
-        if (!(record instanceof IdempotencyRecord idempotencyRecord)) {
+        var storedRecord = requestContext.getProperty(RECORD_PROPERTY);
+        if (!(storedRecord instanceof IdempotencyRecord idempotencyRecord)) {
             return;
         }
         store.complete(
@@ -110,9 +115,9 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
 
     private void handleExisting(
             ContainerRequestContext requestContext,
-            IdempotencyRecord record,
+            IdempotencyRecord existingRecord,
             String requestHash) {
-        if (!record.requestHash().equals(requestHash)) {
+        if (!existingRecord.requestHash().equals(requestHash)) {
             requestContext.abortWith(error(
                     requestContext,
                     Response.Status.CONFLICT,
@@ -120,14 +125,14 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
                     "Chave de idempotencia reutilizada com payload divergente."));
             return;
         }
-        switch (record.processingStatus()) {
+        switch (existingRecord.processingStatus()) {
             case PROCESSING -> requestContext.abortWith(error(
                     requestContext,
                     Response.Status.CONFLICT,
                     "IDEMPOTENCY_IN_PROGRESS",
                     "Requisicao idempotente ainda em processamento."));
-            case COMPLETED, FAILED_FINAL -> requestContext.abortWith(replay(record));
-            case FAILED_RETRYABLE -> requestContext.setProperty(RECORD_PROPERTY, record);
+            case COMPLETED, FAILED_FINAL -> requestContext.abortWith(replay(existingRecord));
+            case FAILED_RETRYABLE -> requestContext.setProperty(RECORD_PROPERTY, existingRecord);
         }
     }
 
@@ -242,12 +247,12 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
         return objectMapper.writeValueAsString(entity);
     }
 
-    private Response replay(IdempotencyRecord record) {
-        var builder = Response.status(record.responseStatus() == null ? Response.Status.OK.getStatusCode() : record.responseStatus())
+    private Response replay(IdempotencyRecord storedRecord) {
+        var builder = Response.status(storedRecord.responseStatus() == null ? Response.Status.OK.getStatusCode() : storedRecord.responseStatus())
                 .type(MediaType.APPLICATION_JSON)
-                .header(CorrelationIdFilter.HEADER_NAME, record.correlationId());
-        if (record.responseBody() != null) {
-            builder.entity(record.responseBody());
+                .header(CorrelationIdFilter.HEADER_NAME, storedRecord.correlationId());
+        if (storedRecord.responseBody() != null) {
+            builder.entity(storedRecord.responseBody());
         }
         return builder.build();
     }

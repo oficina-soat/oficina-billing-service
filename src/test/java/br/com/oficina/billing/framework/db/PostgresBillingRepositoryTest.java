@@ -219,7 +219,7 @@ class PostgresBillingRepositoryTest {
     @Test
     void devePersistirRegistrosDeIdempotenciaNoPostgreSQL() {
         var idempotencyStore = new PersistentIdempotencyStore(dataSource);
-        var record = idempotencyStore.createProcessing(
+        var idempotencyRecord = idempotencyStore.createProcessing(
                 "oficina-billing-service:POST:/api/v1/orcamentos:anonymous",
                 "postgres-idempotency-001",
                 "hash-postgres-001",
@@ -227,17 +227,17 @@ class PostgresBillingRepositoryTest {
                 "request-postgres-001",
                 OffsetDateTime.now(ZoneOffset.UTC).plusDays(1));
 
-        assertEquals(ProcessingStatus.PROCESSING, record.processingStatus());
+        assertEquals(ProcessingStatus.PROCESSING, idempotencyRecord.processingStatus());
 
         idempotencyStore.complete(
-                record.scope(),
-                record.key(),
+                idempotencyRecord.scope(),
+                idempotencyRecord.key(),
                 ProcessingStatus.COMPLETED,
                 201,
                 "{\"orcamentoId\":\"orcamento-postgres-001\"}");
 
         var reloaded = new PersistentIdempotencyStore(dataSource)
-                .find(record.scope(), record.key())
+                .find(idempotencyRecord.scope(), idempotencyRecord.key())
                 .orElseThrow();
         assertEquals(ProcessingStatus.COMPLETED, reloaded.processingStatus());
         assertEquals(201, reloaded.responseStatus());

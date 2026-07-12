@@ -68,8 +68,8 @@ class AwsDomainMessagingClient {
         var queueUrl = queueUrl(topic);
         var request = ReceiveMessageRequest.builder()
                 .queueUrl(queueUrl)
-                .maxNumberOfMessages(Math.max(1, Math.min(10, maxMessages)))
-                .waitTimeSeconds(Math.max(0, Math.min(20, waitTimeSeconds)))
+                .maxNumberOfMessages(Math.clamp(maxMessages, 1, 10))
+                .waitTimeSeconds(Math.clamp(waitTimeSeconds, 0, 20))
                 .build();
         return new ReceivedMessages(queueUrl, sqsClient.receiveMessage(request).messages());
     }
