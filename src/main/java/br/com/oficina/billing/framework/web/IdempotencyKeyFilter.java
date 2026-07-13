@@ -3,10 +3,12 @@ package br.com.oficina.billing.framework.web;
 import br.com.oficina.billing.framework.idempotency.IdempotencyRecord;
 import br.com.oficina.billing.framework.idempotency.IdempotencyRecord.ProcessingStatus;
 import br.com.oficina.billing.framework.idempotency.IdempotencyStore;
+import br.com.oficina.billing.framework.observability.OperationalMetrics;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import io.smallrye.common.annotation.Blocking;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.HttpMethod;
@@ -47,15 +49,25 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
     private final IdempotencyStore store;
     private final ObjectMapper objectMapper;
     private final String serviceName;
+    private final OperationalMetrics metrics;
+
+    public IdempotencyKeyFilter(
+            IdempotencyStore store,
+            ObjectMapper objectMapper,
+            @ConfigProperty(name = "quarkus.application.name") String serviceName) {
+        this(store, objectMapper, serviceName, new OperationalMetrics(new SimpleMeterRegistry(), serviceName));
+    }
 
     @Inject
     public IdempotencyKeyFilter(
             IdempotencyStore store,
             ObjectMapper objectMapper,
-            @ConfigProperty(name = "quarkus.application.name") String serviceName) {
+            @ConfigProperty(name = "quarkus.application.name") String serviceName,
+            OperationalMetrics metrics) {
         this.store = store;
         this.objectMapper = objectMapper;
         this.serviceName = serviceName;
+        this.metrics = metrics;
     }
 
     @Override
@@ -118,6 +130,7 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
             IdempotencyRecord existingRecord,
             String requestHash) {
         if (!existingRecord.requestHash().equals(requestHash)) {
+            metrics.idempotencyConflict(operation(requestContext), "payload_mismatch");
             requestContext.abortWith(error(
                     requestContext,
                     Response.Status.CONFLICT,
@@ -126,14 +139,27 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
             return;
         }
         switch (existingRecord.processingStatus()) {
-            case PROCESSING -> requestContext.abortWith(error(
-                    requestContext,
-                    Response.Status.CONFLICT,
-                    "IDEMPOTENCY_IN_PROGRESS",
-                    "Requisicao idempotente ainda em processamento."));
-            case COMPLETED, FAILED_FINAL -> requestContext.abortWith(replay(existingRecord));
-            case FAILED_RETRYABLE -> requestContext.setProperty(RECORD_PROPERTY, existingRecord);
+            case PROCESSING -> {
+                metrics.idempotencyConflict(operation(requestContext), "in_progress");
+                requestContext.abortWith(error(
+                        requestContext,
+                        Response.Status.CONFLICT,
+                        "IDEMPOTENCY_IN_PROGRESS",
+                        "Requisicao idempotente ainda em processamento."));
+            }
+            case COMPLETED, FAILED_FINAL -> {
+                metrics.idempotencyRetry(operation(requestContext), "replayed");
+                requestContext.abortWith(replay(existingRecord));
+            }
+            case FAILED_RETRYABLE -> {
+                metrics.idempotencyRetry(operation(requestContext), "retryable");
+                requestContext.setProperty(RECORD_PROPERTY, existingRecord);
+            }
         }
+    }
+
+    private String operation(ContainerRequestContext requestContext) {
+        return requestContext.getMethod().toLowerCase(java.util.Locale.ROOT);
     }
 
     private String idempotencyKey(ContainerRequestContext requestContext) {

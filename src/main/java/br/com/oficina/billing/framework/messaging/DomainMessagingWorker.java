@@ -1,5 +1,6 @@
 package br.com.oficina.billing.framework.messaging;
 
+import io.quarkus.runtime.Startup;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -10,6 +11,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 @ApplicationScoped
+@Startup
 class DomainMessagingWorker {
     private static final Logger LOG = Logger.getLogger(DomainMessagingWorker.class);
 

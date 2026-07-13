@@ -9,8 +9,11 @@ import br.com.oficina.billing.core.entities.Orcamento;
 import br.com.oficina.billing.core.entities.StatusOrcamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
+import br.com.oficina.billing.framework.observability.OperationalMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -77,14 +80,22 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
             """;
 
     private final DataSource dataSource;
+    private final OperationalMetrics metrics;
 
     public PostgresOrcamentoDataSourceAdapter(DataSource dataSource) {
+        this(dataSource, new OperationalMetrics(new SimpleMeterRegistry(), "oficina-billing-service"));
+    }
+
+    @Inject
+    public PostgresOrcamentoDataSourceAdapter(DataSource dataSource, OperationalMetrics metrics) {
         this.dataSource = dataSource;
+        this.metrics = metrics;
     }
 
     @Override
     public CompletableFuture<Orcamento> save(Orcamento orcamento) {
-        return CompletableFuture.completedFuture(saveBlocking(orcamento));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "orcamento", "save", () -> saveBlocking(orcamento)));
     }
 
     private Orcamento saveBlocking(Orcamento orcamento) {
@@ -97,7 +108,8 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
 
     @Override
     public CompletableFuture<Optional<Orcamento>> findById(UUID orcamentoId) {
-        return CompletableFuture.completedFuture(findByIdBlocking(orcamentoId));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "orcamento", "find_by_id", () -> findByIdBlocking(orcamentoId)));
     }
 
     private Optional<Orcamento> findByIdBlocking(UUID orcamentoId) {
@@ -117,7 +129,8 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
 
     @Override
     public CompletableFuture<List<Orcamento>> findByOrdemServicoId(UUID ordemServicoId) {
-        return CompletableFuture.completedFuture(findByOrdemServicoIdBlocking(ordemServicoId));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "orcamento", "find_by_ordem", () -> findByOrdemServicoIdBlocking(ordemServicoId)));
     }
 
     private List<Orcamento> findByOrdemServicoIdBlocking(UUID ordemServicoId) {

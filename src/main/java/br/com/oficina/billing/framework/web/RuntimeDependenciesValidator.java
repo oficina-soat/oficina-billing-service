@@ -99,10 +99,6 @@ public class RuntimeDependenciesValidator {
         return normalize(config.getOptionalValue(propertyName, String.class).orElse(""));
     }
 
-    private static boolean booleanValue(Config config, String propertyName, boolean defaultValue) {
-        return config.getOptionalValue(propertyName, Boolean.class).orElse(defaultValue);
-    }
-
     private static String normalize(String value) {
         return value == null ? "" : value.trim();
     }
@@ -222,6 +218,10 @@ public class RuntimeDependenciesValidator {
 
         private static boolean isPlaceholder(String value) {
             return value.toUpperCase(Locale.ROOT).contains("PLACEHOLDER");
+        }
+
+        private static boolean booleanValue(Config config, String propertyName, boolean defaultValue) {
+            return config.getOptionalValue(propertyName, Boolean.class).orElse(defaultValue);
         }
     }
 }

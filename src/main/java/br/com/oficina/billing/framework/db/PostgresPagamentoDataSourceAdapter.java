@@ -8,8 +8,11 @@ import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
+import br.com.oficina.billing.framework.observability.OperationalMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -69,14 +72,22 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
             """;
 
     private final DataSource dataSource;
+    private final OperationalMetrics metrics;
 
     public PostgresPagamentoDataSourceAdapter(DataSource dataSource) {
+        this(dataSource, new OperationalMetrics(new SimpleMeterRegistry(), "oficina-billing-service"));
+    }
+
+    @Inject
+    public PostgresPagamentoDataSourceAdapter(DataSource dataSource, OperationalMetrics metrics) {
         this.dataSource = dataSource;
+        this.metrics = metrics;
     }
 
     @Override
     public CompletableFuture<Pagamento> save(Pagamento pagamento) {
-        return CompletableFuture.completedFuture(saveBlocking(pagamento));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "pagamento", "save", () -> saveBlocking(pagamento)));
     }
 
     private Pagamento saveBlocking(Pagamento pagamento) {
@@ -101,12 +112,14 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
 
     @Override
     public CompletableFuture<Optional<Pagamento>> findById(UUID pagamentoId) {
-        return CompletableFuture.completedFuture(findOne(SELECT_PAGAMENTO_BY_ID, pagamentoId));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "pagamento", "find_by_id", () -> findOne(SELECT_PAGAMENTO_BY_ID, pagamentoId)));
     }
 
     @Override
     public CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId) {
-        return CompletableFuture.completedFuture(findByOrdemServicoIdBlocking(ordemServicoId));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "pagamento", "find_by_ordem", () -> findByOrdemServicoIdBlocking(ordemServicoId)));
     }
 
     private List<Pagamento> findByOrdemServicoIdBlocking(UUID ordemServicoId) {
@@ -127,7 +140,8 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
 
     @Override
     public CompletableFuture<Optional<Pagamento>> findByOrcamentoId(UUID orcamentoId) {
-        return CompletableFuture.completedFuture(findOne(SELECT_PAGAMENTO_BY_ORCAMENTO, orcamentoId));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "pagamento", "find_by_orcamento", () -> findOne(SELECT_PAGAMENTO_BY_ORCAMENTO, orcamentoId)));
     }
 
     private Optional<Pagamento> findOne(String sql, UUID id) {
