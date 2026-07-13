@@ -22,6 +22,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.DeleteMessageRequest;
 import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
 import software.amazon.awssdk.services.sqs.model.Message;
+import software.amazon.awssdk.services.sqs.model.MessageSystemAttributeName;
 import software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest;
 import software.amazon.awssdk.services.sts.StsClient;
 
@@ -76,6 +77,7 @@ public class AwsDomainMessagingClient {
                 .queueUrl(queueUrl)
                 .maxNumberOfMessages(Math.clamp(maxMessages, 1, 10))
                 .waitTimeSeconds(Math.clamp(waitTimeSeconds, 0, 20))
+                .messageSystemAttributeNames(MessageSystemAttributeName.APPROXIMATE_RECEIVE_COUNT)
                 .build();
         return new ReceivedMessages(queueUrl, sqsClient.receiveMessage(request).messages());
     }

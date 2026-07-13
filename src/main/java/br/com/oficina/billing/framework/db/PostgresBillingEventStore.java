@@ -10,13 +10,16 @@ import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
 import br.com.oficina.billing.framework.messaging.DomainEventEnvelope;
 import br.com.oficina.billing.framework.messaging.OutboxEventRecord;
+import br.com.oficina.billing.framework.observability.OperationalMetrics;
 import br.com.oficina.billing.framework.observability.StructuredLog;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.arc.properties.IfBuildProperty;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -157,9 +160,19 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     private final DataSource dataSource;
     private final ObjectMapper objectMapper;
+    private final OperationalMetrics metrics;
 
     public PostgresBillingEventStore(DataSource dataSource, ObjectMapper objectMapper) {
+        this(
+                dataSource,
+                objectMapper,
+                new OperationalMetrics(new SimpleMeterRegistry(), "oficina-billing-service"));
+    }
+
+    @Inject
+    public PostgresBillingEventStore(DataSource dataSource, ObjectMapper objectMapper, OperationalMetrics metrics) {
         this.dataSource = dataSource;
+        this.metrics = metrics;
         this.objectMapper = objectMapper.copy()
                 .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
                 .enable(DeserializationFeature.USE_BIG_INTEGER_FOR_INTS);
@@ -167,7 +180,8 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public CompletableFuture<List<ItemOrcamento>> snapshotFinanceiro(UUID ordemServicoId) {
-        return CompletableFuture.completedFuture(snapshotFinanceiroBlocking(ordemServicoId));
+        return CompletableFuture.completedFuture(metrics.persistence(
+                "postgresql", "financeiro_projection", "snapshot", () -> snapshotFinanceiroBlocking(ordemServicoId)));
     }
 
     private List<ItemOrcamento> snapshotFinanceiroBlocking(UUID ordemServicoId) {
@@ -195,18 +209,26 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public boolean registrarEventoConsumido(DomainEventEnvelope envelope) {
-        return registrarEventoConsumido(
-                envelope.eventId(),
-                envelope.eventType(),
-                envelope.eventVersion(),
-                envelope.producer(),
-                envelope.aggregateId(),
-                envelope.occurredAt());
+        return metrics.persistence(
+                "postgresql",
+                "consumed_event",
+                "insert",
+                () -> registrarEventoConsumido(
+                        envelope.eventId(),
+                        envelope.eventType(),
+                        envelope.eventVersion(),
+                        envelope.producer(),
+                        envelope.aggregateId(),
+                        envelope.occurredAt()));
     }
 
     @Override
     public boolean registrarEventoConsumido(UUID eventId) {
-        return registrarEventoConsumido(eventId, null, null, null, null, null);
+        return metrics.persistence(
+                "postgresql",
+                "consumed_event",
+                "insert",
+                () -> registrarEventoConsumido(eventId, null, null, null, null, null));
     }
 
     private boolean registrarEventoConsumido(
@@ -241,6 +263,11 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public boolean eventoConsumido(UUID eventId) {
+        return metrics.persistence(
+                "postgresql", "consumed_event", "find_by_id", () -> eventoConsumidoBlocking(eventId));
+    }
+
+    private boolean eventoConsumidoBlocking(UUID eventId) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(SELECT_CONSUMED_EVENT)) {
             statement.setObject(1, eventId);
@@ -254,6 +281,11 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public void registrarItem(UUID ordemServicoId, ItemOrcamento item) {
+        metrics.persistence(
+                "postgresql", "financeiro_projection", "upsert", () -> registrarItemBlocking(ordemServicoId, item));
+    }
+
+    private void registrarItemBlocking(UUID ordemServicoId, ItemOrcamento item) {
         var now = OffsetDateTime.now(ZoneOffset.UTC);
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(UPSERT_ITEM)) {
@@ -285,7 +317,11 @@ public class PostgresBillingEventStore implements BillingEventStore {
             Map<String, Object> payload,
             String correlationId,
             OffsetDateTime occurredAt) {
-        registrarOutboxBlocking(aggregateId, eventType, topic, payload, correlationId, occurredAt);
+        metrics.persistence(
+                "postgresql",
+                "outbox",
+                "insert",
+                () -> registrarOutboxBlocking(aggregateId, eventType, topic, payload, correlationId, occurredAt));
         return CompletableFuture.completedFuture(null);
     }
 
@@ -338,6 +374,10 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public List<OutboxEventRecord> listarOutbox() {
+        return metrics.persistence("postgresql", "outbox", "list", this::listarOutboxBlocking);
+    }
+
+    private List<OutboxEventRecord> listarOutboxBlocking() {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(SELECT_OUTBOX);
                 var resultSet = statement.executeQuery()) {
@@ -360,6 +400,11 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public List<OutboxEventRecord> listarPendentesParaPublicacao(int limit) {
+        return metrics.persistence(
+                "postgresql", "outbox", "list_pending", () -> listarPendentesParaPublicacaoBlocking(limit));
+    }
+
+    private List<OutboxEventRecord> listarPendentesParaPublicacaoBlocking(int limit) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(SELECT_PENDING_OUTBOX_FOR_PUBLICATION)) {
             statement.setObject(1, OffsetDateTime.now(ZoneOffset.UTC));
@@ -378,6 +423,11 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public OutboxEventRecord marcarPublicado(UUID eventId) {
+        return metrics.persistence(
+                "postgresql", "outbox", "mark_published", () -> marcarPublicadoBlocking(eventId));
+    }
+
+    private OutboxEventRecord marcarPublicadoBlocking(UUID eventId) {
         var publicado = inTransaction(connection -> {
             var event = selectOutboxByIdForUpdate(connection, eventId);
             var updated = new OutboxEventRecord(
@@ -404,6 +454,15 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public OutboxEventRecord marcarFalhaPublicacao(UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed) {
+        return metrics.persistence(
+                "postgresql",
+                "outbox",
+                "mark_failure",
+                () -> marcarFalhaPublicacaoBlocking(eventId, lastError, nextAttemptAt, failed));
+    }
+
+    private OutboxEventRecord marcarFalhaPublicacaoBlocking(
+            UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed) {
         var status = failed ? STATUS_FAILED : STATUS_PENDING;
         var updated = inTransaction(connection -> {
             var event = selectOutboxByIdForUpdate(connection, eventId);

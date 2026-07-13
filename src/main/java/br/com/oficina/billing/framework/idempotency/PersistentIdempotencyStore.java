@@ -1,6 +1,8 @@
 package br.com.oficina.billing.framework.idempotency;
 
 import br.com.oficina.billing.framework.idempotency.IdempotencyRecord.ProcessingStatus;
+import br.com.oficina.billing.framework.observability.OperationalMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -12,16 +14,23 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class PersistentIdempotencyStore implements IdempotencyStore {
     private final IdempotencyStore delegate;
+    private final OperationalMetrics metrics;
+    private final String database;
 
     @Inject
     public PersistentIdempotencyStore(
             @ConfigProperty(name = "oficina.persistence.kind") String persistenceKind,
-            Instance<DataSource> dataSources) {
+            Instance<DataSource> dataSources,
+            OperationalMetrics metrics) {
         this.delegate = createDelegate(persistenceKind, dataSources);
+        this.metrics = metrics;
+        this.database = persistenceKind.toLowerCase(java.util.Locale.ROOT);
     }
 
     public PersistentIdempotencyStore(DataSource dataSource) {
         this.delegate = new PostgresIdempotencyStore(dataSource);
+        this.metrics = new OperationalMetrics(new SimpleMeterRegistry(), "oficina-billing-service");
+        this.database = "postgresql";
     }
 
     private IdempotencyStore createDelegate(String persistenceKind, Instance<DataSource> dataSources) {
@@ -34,7 +43,7 @@ public class PersistentIdempotencyStore implements IdempotencyStore {
 
     @Override
     public Optional<IdempotencyRecord> find(String scope, String key) {
-        return delegate.find(scope, key);
+        return metrics.persistence(database, "idempotency", "find", () -> delegate.find(scope, key));
     }
 
     @Override
@@ -45,7 +54,11 @@ public class PersistentIdempotencyStore implements IdempotencyStore {
             String correlationId,
             String requestId,
             OffsetDateTime expiresAt) {
-        return delegate.createProcessing(scope, key, requestHash, correlationId, requestId, expiresAt);
+        return metrics.persistence(
+                database,
+                "idempotency",
+                "create_processing",
+                () -> delegate.createProcessing(scope, key, requestHash, correlationId, requestId, expiresAt));
     }
 
     @Override
@@ -55,6 +68,10 @@ public class PersistentIdempotencyStore implements IdempotencyStore {
             ProcessingStatus processingStatus,
             int responseStatus,
             String responseBody) {
-        delegate.complete(scope, key, processingStatus, responseStatus, responseBody);
+        metrics.persistence(
+                database,
+                "idempotency",
+                "complete",
+                () -> delegate.complete(scope, key, processingStatus, responseStatus, responseBody));
     }
 }
