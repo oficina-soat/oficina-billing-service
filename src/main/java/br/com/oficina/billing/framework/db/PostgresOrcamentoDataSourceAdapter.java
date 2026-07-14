@@ -27,6 +27,8 @@ import javax.sql.DataSource;
 @ApplicationScoped
 @IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql")
 public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGateway {
+    private static final String DATABASE = "postgresql";
+    private static final String RESOURCE = "orcamento";
     private static final String UPSERT_ORCAMENTO = """
             INSERT INTO orcamento (
                 id,
@@ -95,7 +97,7 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
     @Override
     public CompletableFuture<Orcamento> save(Orcamento orcamento) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "orcamento", "save", () -> saveBlocking(orcamento)));
+                DATABASE, RESOURCE, "save", () -> saveBlocking(orcamento)));
     }
 
     private Orcamento saveBlocking(Orcamento orcamento) {
@@ -109,7 +111,7 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
     @Override
     public CompletableFuture<Optional<Orcamento>> findById(UUID orcamentoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "orcamento", "find_by_id", () -> findByIdBlocking(orcamentoId)));
+                DATABASE, RESOURCE, "find_by_id", () -> findByIdBlocking(orcamentoId)));
     }
 
     private Optional<Orcamento> findByIdBlocking(UUID orcamentoId) {
@@ -130,7 +132,7 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
     @Override
     public CompletableFuture<List<Orcamento>> findByOrdemServicoId(UUID ordemServicoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "orcamento", "find_by_ordem", () -> findByOrdemServicoIdBlocking(ordemServicoId)));
+                DATABASE, RESOURCE, "find_by_ordem", () -> findByOrdemServicoIdBlocking(ordemServicoId)));
     }
 
     private List<Orcamento> findByOrdemServicoIdBlocking(UUID ordemServicoId) {

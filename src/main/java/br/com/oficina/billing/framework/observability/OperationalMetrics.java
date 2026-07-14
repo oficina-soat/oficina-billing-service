@@ -16,6 +16,12 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @ApplicationScoped
 public class OperationalMetrics {
+    private static final String TAG_SERVICE = "service";
+    private static final String TAG_REASON = "reason";
+    private static final String TAG_QUEUE = "queue";
+    private static final String TAG_TOPIC = "topic";
+    private static final String TAG_OPERATION = "operation";
+    private static final String TAG_EVENT_TYPE = "eventType";
     private final MeterRegistry registry;
     private final String service;
     private final Map<String, AtomicLong> pendingByEventType = new ConcurrentHashMap<>();
@@ -27,7 +33,7 @@ public class OperationalMetrics {
         this.registry = registry;
         this.service = service;
         Gauge.builder("outbox.oldest.pending.age", oldestPendingAgeSeconds, AtomicLong::doubleValue)
-                .tags("service", service)
+                .tags(TAG_SERVICE, service)
                 .description("Idade em segundos do evento pendente mais antigo da Outbox")
                 .register(registry);
     }
@@ -75,26 +81,26 @@ public class OperationalMetrics {
         registry.counter("outbox.failed.count", outboxTags(eventType, topic)).increment();
         registry.counter(
                         "messaging.events.failed.count",
-                        messagingTags(eventType, topic).and("reason", reason))
+                        messagingTags(eventType, topic).and(TAG_REASON, reason))
                 .increment();
     }
 
     public long startSqsProcessing(String queue, String topic) {
-        registry.counter("messaging.sqs.received.count", "service", service, "queue", queue, "topic", topic)
+        registry.counter("messaging.sqs.received.count", TAG_SERVICE, service, TAG_QUEUE, queue, TAG_TOPIC, topic)
                 .increment();
         return System.nanoTime();
     }
 
     public void sqsConsumed(String queue, String topic, String eventType, long startedAt) {
-        var tags = messagingTags(eventType, topic).and("queue", queue);
+        var tags = messagingTags(eventType, topic).and(TAG_QUEUE, queue);
         registry.counter("messaging.events.consumed.count", tags).increment();
         registry.timer("messaging.events.processing.duration", tags)
                 .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
     }
 
     public void sqsFailed(String queue, String topic, String eventType, String reason, boolean sentToDlq, long startedAt) {
-        var tags = messagingTags(eventType, topic).and("queue", queue);
-        registry.counter("messaging.events.failed.count", tags.and("reason", reason)).increment();
+        var tags = messagingTags(eventType, topic).and(TAG_QUEUE, queue);
+        registry.counter("messaging.events.failed.count", tags.and(TAG_REASON, reason)).increment();
         registry.timer("messaging.events.processing.duration", tags)
                 .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
         if (sentToDlq) {
@@ -103,22 +109,22 @@ public class OperationalMetrics {
     }
 
     public void idempotencyRetry(String operation, String status) {
-        registry.counter("idempotency.retries.count", "service", service, "operation", operation, "status", status)
+        registry.counter("idempotency.retries.count", TAG_SERVICE, service, TAG_OPERATION, operation, "status", status)
                 .increment();
     }
 
     public void idempotencyConflict(String operation, String reason) {
-        registry.counter("idempotency.conflicts.count", "service", service, "operation", operation, "reason", reason)
+        registry.counter("idempotency.conflicts.count", TAG_SERVICE, service, TAG_OPERATION, operation, TAG_REASON, reason)
                 .increment();
     }
 
     private void recordPersistence(
             String database, String resource, String operation, String result, String error, long startedAt) {
         var tags = Tags.of(
-                "service", service,
+                TAG_SERVICE, service,
                 "database", database,
                 "resource", resource,
-                "operation", operation,
+                TAG_OPERATION, operation,
                 "result", result,
                 "error", error);
         registry.counter("persistence.operations.count", tags).increment();
@@ -130,7 +136,7 @@ public class OperationalMetrics {
         return pendingByEventType.computeIfAbsent(eventType, key -> {
             var value = new AtomicLong();
             Gauge.builder("outbox.pending.count", value, AtomicLong::doubleValue)
-                    .tags("service", service, "eventType", key)
+                    .tags(TAG_SERVICE, service, TAG_EVENT_TYPE, key)
                     .description("Quantidade de eventos pendentes na Outbox")
                     .register(registry);
             return value;
@@ -138,11 +144,11 @@ public class OperationalMetrics {
     }
 
     private Tags outboxTags(String eventType, String topic) {
-        return Tags.of("service", service, "eventType", eventType, "topic", topic);
+        return Tags.of(TAG_SERVICE, service, TAG_EVENT_TYPE, eventType, TAG_TOPIC, topic);
     }
 
     private Tags messagingTags(String eventType, String topic) {
-        return Tags.of("service", service, "eventType", eventType, "topic", topic);
+        return Tags.of(TAG_SERVICE, service, TAG_EVENT_TYPE, eventType, TAG_TOPIC, topic);
     }
 
     private String categorize(RuntimeException exception) {
