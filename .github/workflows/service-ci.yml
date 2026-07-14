@@ -50,6 +50,12 @@ jobs:
           rm -rf ../oficina-platform
           git clone --depth 1 --branch main https://github.com/oficina-soat/oficina-platform.git ../oficina-platform
 
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@829323503d1be3d00ca8346e5391ca0b07a9ab0d # v5
+
+      - name: Validate Kubernetes base
+        run: kubectl kustomize k8s/base >/tmp/oficina-billing-service-k8s.yaml
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
