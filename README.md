@@ -120,7 +120,7 @@ A publicação de imagem e o deploy Kubernetes são automáticos por padrão em 
 
 O workflow não usa GitHub Environment para evitar aprovação manual nos jobs. As variáveis e secrets de AWS/ECR/EKS devem estar em nível de repositório ou organização, e o controle manual do fluxo acontece no merge do PR aberto automaticamente a partir da branch `develop`.
 
-Quando `ENABLE_K8S_DEPLOY` não é `false`, o workflow do serviço faz checkout do `oficina-infra`, aplica o manifest canônico em `../oficina-infra/k8s/base/microservices/oficina-billing-service/` com a imagem publicada pelo próprio workflow, aguarda o rollout no EKS e confere se o container ficou com a imagem esperada. Após recriar a infraestrutura base do lab, não é necessário executar um segundo `Deploy Lab` apenas para materializar este serviço.
+Quando `ENABLE_K8S_DEPLOY` não é `false`, o workflow valida e aplica a base canônica em `k8s/base/`, usando o `oficina-infra` para compor os valores e secrets do ambiente `lab`, aguarda o rollout no EKS e confere a imagem final. Após recriar a infraestrutura base do lab, não é necessário executar um segundo `Deploy Lab` apenas para materializar este serviço.
 
 ## Validação de contratos
 
@@ -139,7 +139,7 @@ A imagem inicia no profile `prod`; portanto, o arquivo informado ao `docker run`
 
 A estratégia de entrega dos manifests está definida em [Estratégia de entrega dos manifestos Kubernetes](../oficina-platform/docs/infrastructure/kubernetes-manifest-strategy.md).
 
-Este repositório mantém o Dockerfile do serviço e não mantém cópia executável dos manifests Kubernetes para evitar divergência. A referência normativa do serviço fica em [Template Kubernetes do oficina-billing-service](../oficina-platform/templates/kubernetes/base/oficina-billing-service/), e o destino canônico de deploy é `../oficina-infra/k8s/base/microservices/oficina-billing-service/`.
+Este repositório é a fonte canônica do Dockerfile e da base Kubernetes executável em [`k8s/base/`](k8s/base/). O `oficina-infra` mantém a composição, os secrets e os componentes compartilhados do ambiente `lab`; o template normativo permanece em [Template Kubernetes do oficina-billing-service](../oficina-platform/templates/kubernetes/base/oficina-billing-service/).
 
 O deploy automatizado com `ENABLE_K8S_DEPLOY` diferente de `false` materializa o Deployment quando ele ainda não existe, atualiza a imagem quando ele já existe e valida o rollout no EKS usando o script canônico `scripts/manual/apply-microservices.sh` do `oficina-infra`.
 
@@ -230,7 +230,7 @@ As tentativas de integração expõem as métricas `payment.provider.enabled`, `
 - `DEPLOYMENT_ENVIRONMENT`
 - `oficina.persistence.kind`, valor build-time `postgresql` no runtime e `memory` apenas em testes ou execução local explícita
 
-Em ambiente local, valores de desenvolvimento ficam em `src/main/resources/application.properties`. Em Kubernetes, variáveis de banco vêm do secret `oficina-billing-service-database-env`, e variáveis não sensíveis vêm do ConfigMap definido pelo manifest canônico no `oficina-infra`. O profile protegido não aceita os defaults locais de banco nem endpoints AWS locais.
+Em ambiente local, valores de desenvolvimento ficam em `src/main/resources/application.properties`. Em Kubernetes, variáveis de banco vêm do secret `oficina-billing-service-database-env`, e variáveis não sensíveis vêm do ConfigMap canônico em [`k8s/base/configmap.yaml`](k8s/base/configmap.yaml). O profile protegido não aceita os defaults locais de banco nem endpoints AWS locais.
 
 ## Estrutura
 
