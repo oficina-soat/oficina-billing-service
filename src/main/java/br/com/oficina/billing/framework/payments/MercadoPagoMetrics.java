@@ -9,6 +9,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
 import io.micrometer.core.instrument.Timer;
+import io.quarkus.runtime.Startup;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.Locale;
 import java.util.Set;
@@ -16,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 @ApplicationScoped
+@Startup
 public class MercadoPagoMetrics {
     static final String ENABLED = "payment.provider.enabled";
     static final String REQUESTS = "payment.provider.requests.count";
