@@ -39,6 +39,10 @@ import org.jboss.logging.MDC;
 public class PostgresBillingEventStore implements BillingEventStore {
     private static final Logger LOG = Logger.getLogger(PostgresBillingEventStore.class);
     private static final String PRODUCER = "oficina-billing-service";
+    private static final String DATABASE = "postgresql";
+    private static final String CONSUMED_EVENT = "consumed_event";
+    private static final String INSERT = "insert";
+    private static final String OUTBOX = "outbox";
     private static final String STATUS_PENDING = "PENDING";
     private static final String STATUS_PUBLISHED = "PUBLISHED";
     private static final String STATUS_FAILED = "FAILED";
@@ -166,7 +170,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
         this(
                 dataSource,
                 objectMapper,
-                new OperationalMetrics(new SimpleMeterRegistry(), "oficina-billing-service"));
+                new OperationalMetrics(new SimpleMeterRegistry(), PRODUCER));
     }
 
     @Inject
@@ -181,7 +185,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public CompletableFuture<List<ItemOrcamento>> snapshotFinanceiro(UUID ordemServicoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "financeiro_projection", "snapshot", () -> snapshotFinanceiroBlocking(ordemServicoId)));
+                DATABASE, "financeiro_projection", "snapshot", () -> snapshotFinanceiroBlocking(ordemServicoId)));
     }
 
     private List<ItemOrcamento> snapshotFinanceiroBlocking(UUID ordemServicoId) {
@@ -210,9 +214,9 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public boolean registrarEventoConsumido(DomainEventEnvelope envelope) {
         return metrics.persistence(
-                "postgresql",
-                "consumed_event",
-                "insert",
+                DATABASE,
+                CONSUMED_EVENT,
+                INSERT,
                 () -> registrarEventoConsumido(
                         envelope.eventId(),
                         envelope.eventType(),
@@ -225,9 +229,9 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public boolean registrarEventoConsumido(UUID eventId) {
         return metrics.persistence(
-                "postgresql",
-                "consumed_event",
-                "insert",
+                DATABASE,
+                CONSUMED_EVENT,
+                INSERT,
                 () -> registrarEventoConsumido(eventId, null, null, null, null, null));
     }
 
@@ -264,7 +268,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public boolean eventoConsumido(UUID eventId) {
         return metrics.persistence(
-                "postgresql", "consumed_event", "find_by_id", () -> eventoConsumidoBlocking(eventId));
+                DATABASE, CONSUMED_EVENT, "find_by_id", () -> eventoConsumidoBlocking(eventId));
     }
 
     private boolean eventoConsumidoBlocking(UUID eventId) {
@@ -282,7 +286,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public void registrarItem(UUID ordemServicoId, ItemOrcamento item) {
         metrics.persistence(
-                "postgresql", "financeiro_projection", "upsert", () -> registrarItemBlocking(ordemServicoId, item));
+                DATABASE, "financeiro_projection", "upsert", () -> registrarItemBlocking(ordemServicoId, item));
     }
 
     private void registrarItemBlocking(UUID ordemServicoId, ItemOrcamento item) {
@@ -318,9 +322,9 @@ public class PostgresBillingEventStore implements BillingEventStore {
             String correlationId,
             OffsetDateTime occurredAt) {
         metrics.persistence(
-                "postgresql",
-                "outbox",
-                "insert",
+                DATABASE,
+                OUTBOX,
+                INSERT,
                 () -> registrarOutboxBlocking(aggregateId, eventType, topic, payload, correlationId, occurredAt));
         return CompletableFuture.completedFuture(null);
     }
@@ -374,7 +378,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public List<OutboxEventRecord> listarOutbox() {
-        return metrics.persistence("postgresql", "outbox", "list", this::listarOutboxBlocking);
+        return metrics.persistence(DATABASE, OUTBOX, "list", this::listarOutboxBlocking);
     }
 
     private List<OutboxEventRecord> listarOutboxBlocking() {
@@ -401,7 +405,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public List<OutboxEventRecord> listarPendentesParaPublicacao(int limit) {
         return metrics.persistence(
-                "postgresql", "outbox", "list_pending", () -> listarPendentesParaPublicacaoBlocking(limit));
+                DATABASE, OUTBOX, "list_pending", () -> listarPendentesParaPublicacaoBlocking(limit));
     }
 
     private List<OutboxEventRecord> listarPendentesParaPublicacaoBlocking(int limit) {
@@ -424,7 +428,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public OutboxEventRecord marcarPublicado(UUID eventId) {
         return metrics.persistence(
-                "postgresql", "outbox", "mark_published", () -> marcarPublicadoBlocking(eventId));
+                DATABASE, OUTBOX, "mark_published", () -> marcarPublicadoBlocking(eventId));
     }
 
     private OutboxEventRecord marcarPublicadoBlocking(UUID eventId) {
@@ -455,8 +459,8 @@ public class PostgresBillingEventStore implements BillingEventStore {
     @Override
     public OutboxEventRecord marcarFalhaPublicacao(UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed) {
         return metrics.persistence(
-                "postgresql",
-                "outbox",
+                DATABASE,
+                OUTBOX,
                 "mark_failure",
                 () -> marcarFalhaPublicacaoBlocking(eventId, lastError, nextAttemptAt, failed));
     }

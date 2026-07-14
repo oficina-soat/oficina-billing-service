@@ -24,6 +24,8 @@ import javax.sql.DataSource;
 @ApplicationScoped
 @IfBuildProperty(name = "oficina.persistence.kind", stringValue = "postgresql")
 public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGateway {
+    private static final String DATABASE = "postgresql";
+    private static final String RESOURCE = "pagamento";
     private static final String UPSERT_PAGAMENTO = """
             INSERT INTO pagamento (
                 id,
@@ -87,7 +89,7 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     @Override
     public CompletableFuture<Pagamento> save(Pagamento pagamento) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "pagamento", "save", () -> saveBlocking(pagamento)));
+                DATABASE, RESOURCE, "save", () -> saveBlocking(pagamento)));
     }
 
     private Pagamento saveBlocking(Pagamento pagamento) {
@@ -113,13 +115,13 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     @Override
     public CompletableFuture<Optional<Pagamento>> findById(UUID pagamentoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "pagamento", "find_by_id", () -> findOne(SELECT_PAGAMENTO_BY_ID, pagamentoId)));
+                DATABASE, RESOURCE, "find_by_id", () -> findOne(SELECT_PAGAMENTO_BY_ID, pagamentoId)));
     }
 
     @Override
     public CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "pagamento", "find_by_ordem", () -> findByOrdemServicoIdBlocking(ordemServicoId)));
+                DATABASE, RESOURCE, "find_by_ordem", () -> findByOrdemServicoIdBlocking(ordemServicoId)));
     }
 
     private List<Pagamento> findByOrdemServicoIdBlocking(UUID ordemServicoId) {
@@ -141,7 +143,7 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     @Override
     public CompletableFuture<Optional<Pagamento>> findByOrcamentoId(UUID orcamentoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
-                "postgresql", "pagamento", "find_by_orcamento", () -> findOne(SELECT_PAGAMENTO_BY_ORCAMENTO, orcamentoId)));
+                DATABASE, RESOURCE, "find_by_orcamento", () -> findOne(SELECT_PAGAMENTO_BY_ORCAMENTO, orcamentoId)));
     }
 
     private Optional<Pagamento> findOne(String sql, UUID id) {

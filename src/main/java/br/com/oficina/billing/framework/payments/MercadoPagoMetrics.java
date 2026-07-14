@@ -28,6 +28,8 @@ public class MercadoPagoMetrics {
     private static final String PROVIDER = "mercado-pago";
     private static final String CURRENCY = "BRL";
     private static final String NO_PROVIDER_STATUS = "none";
+    private static final String TAG_METHOD = "method";
+    private static final String TAG_OUTCOME = "outcome";
     private static final Set<String> PROVIDER_STATUSES = Set.of(
             "approved",
             "rejected",
@@ -99,16 +101,16 @@ public class MercadoPagoMetrics {
         var method = pagamento.metodo().name();
         registry.counter(
                         REQUESTS,
-                        commonTags.and("method", method, "outcome", outcome, "providerStatus", providerStatus))
+                        commonTags.and(TAG_METHOD, method, TAG_OUTCOME, outcome, "providerStatus", providerStatus))
                 .increment();
         DistributionSummary.builder(AMOUNT)
-                .tags(commonTags.and("method", method, "outcome", outcome, "currency", CURRENCY))
+                .tags(commonTags.and(TAG_METHOD, method, TAG_OUTCOME, outcome, "currency", CURRENCY))
                 .baseUnit(CURRENCY)
                 .register(registry)
                 .record(pagamento.valor().doubleValue());
         if (sample != null) {
             sample.stop(Timer.builder(DURATION)
-                    .tags(commonTags.and("method", method, "outcome", outcome))
+                    .tags(commonTags.and(TAG_METHOD, method, TAG_OUTCOME, outcome))
                     .publishPercentileHistogram()
                     .register(registry));
         }
@@ -117,7 +119,7 @@ public class MercadoPagoMetrics {
     private Counter failureCounter(Pagamento pagamento, String reason) {
         return registry.counter(
                 FAILURES,
-                commonTags.and("method", pagamento.metodo().name(), "reason", reason));
+                commonTags.and(TAG_METHOD, pagamento.metodo().name(), "reason", reason));
     }
 
     private static String normalizedProviderStatus(String providerStatus) {
