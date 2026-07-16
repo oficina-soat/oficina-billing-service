@@ -31,6 +31,8 @@ class BillingResourceTest {
                 .body("orcamentoId", notNullValue())
                 .body("ordemServicoId", equalTo(ordemServicoId))
                 .body("status", equalTo("GERADO"))
+                .body("acoesPermitidas", hasSize(2))
+                .body("acoesPermitidas[0]", equalTo("APROVAR"))
                 .body("itens", hasSize(1))
                 .body("valorTotal", equalTo(0))
                 .extract()
@@ -65,7 +67,8 @@ class BillingResourceTest {
                 .post("/api/v1/orcamentos/{orcamentoId}/aprovacao", orcamentoId)
                 .then()
                 .statusCode(200)
-                .body("status", equalTo("APROVADO"));
+                .body("status", equalTo("APROVADO"))
+                .body("acoesPermitidas", hasSize(0));
 
         var pagamentoId = given()
                 .header("X-Idempotency-Key", "pagamento-" + UUID.randomUUID())
@@ -87,6 +90,7 @@ class BillingResourceTest {
                 .body("ordemServicoId", equalTo(ordemServicoId))
                 .body("orcamentoId", equalTo(orcamentoId))
                 .body("status", equalTo("CRIADO"))
+                .body("acoesPermitidas", hasSize(3))
                 .body("metodo", equalTo("PIX"))
                 .extract()
                 .path("pagamentoId")
@@ -106,6 +110,7 @@ class BillingResourceTest {
                 .then()
                 .statusCode(200)
                 .body("status", equalTo("CONFIRMADO"))
+                .body("acoesPermitidas", hasSize(0))
                 .body("provedor", equalTo("mercado-pago"))
                 .body("transacaoExternaId", equalTo("mp-test-001"));
 

@@ -13,4 +13,9 @@ public record Orcamento(
         StatusOrcamento status,
         OffsetDateTime criadoEm,
         OffsetDateTime atualizadoEm) {
+    public List<AcaoPermitidaOrcamento> acoesPermitidas() {
+        return status == StatusOrcamento.GERADO
+                ? List.of(AcaoPermitidaOrcamento.APROVAR, AcaoPermitidaOrcamento.RECUSAR)
+                : List.of();
+    }
 }

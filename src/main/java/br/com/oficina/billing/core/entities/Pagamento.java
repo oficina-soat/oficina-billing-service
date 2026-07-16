@@ -2,6 +2,7 @@ package br.com.oficina.billing.core.entities;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record Pagamento(
@@ -15,4 +16,12 @@ public record Pagamento(
         String transacaoExternaId,
         OffsetDateTime criadoEm,
         OffsetDateTime atualizadoEm) {
+    public List<AcaoPermitidaPagamento> acoesPermitidas() {
+        return status == StatusPagamento.CRIADO
+                ? List.of(
+                        AcaoPermitidaPagamento.CONFIRMAR,
+                        AcaoPermitidaPagamento.RECUSAR,
+                        AcaoPermitidaPagamento.CANCELAR)
+                : List.of();
+    }
 }
