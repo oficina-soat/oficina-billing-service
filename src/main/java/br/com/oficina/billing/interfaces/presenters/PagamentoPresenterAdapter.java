@@ -37,6 +37,7 @@ public class PagamentoPresenterAdapter {
                 pagamento.provedor(),
                 pagamento.transacaoExternaId(),
                 pagamento.criadoEm(),
-                pagamento.atualizadoEm());
+                pagamento.atualizadoEm(),
+                pagamento.acoesPermitidas());
     }
 }

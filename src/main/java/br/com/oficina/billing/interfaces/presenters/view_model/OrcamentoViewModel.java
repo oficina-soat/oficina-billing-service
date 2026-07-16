@@ -1,5 +1,6 @@
 package br.com.oficina.billing.interfaces.presenters.view_model;
 
+import br.com.oficina.billing.core.entities.AcaoPermitidaOrcamento;
 import br.com.oficina.billing.core.entities.StatusOrcamento;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
@@ -13,5 +14,6 @@ public record OrcamentoViewModel(
         BigDecimal valorTotal,
         StatusOrcamento status,
         OffsetDateTime criadoEm,
-        OffsetDateTime atualizadoEm) {
+        OffsetDateTime atualizadoEm,
+        List<AcaoPermitidaOrcamento> acoesPermitidas) {
 }

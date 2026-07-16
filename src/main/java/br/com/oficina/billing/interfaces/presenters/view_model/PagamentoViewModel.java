@@ -1,9 +1,11 @@
 package br.com.oficina.billing.interfaces.presenters.view_model;
 
+import br.com.oficina.billing.core.entities.AcaoPermitidaPagamento;
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record PagamentoViewModel(
@@ -16,5 +18,6 @@ public record PagamentoViewModel(
         String provedor,
         String transacaoExternaId,
         OffsetDateTime criadoEm,
-        OffsetDateTime atualizadoEm) {
+        OffsetDateTime atualizadoEm,
+        List<AcaoPermitidaPagamento> acoesPermitidas) {
 }

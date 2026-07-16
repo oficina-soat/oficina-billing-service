@@ -36,7 +36,8 @@ public class OrcamentoPresenterAdapter {
                 orcamento.valorTotal(),
                 orcamento.status(),
                 orcamento.criadoEm(),
-                orcamento.atualizadoEm());
+                orcamento.atualizadoEm(),
+                orcamento.acoesPermitidas());
     }
 
     private ItemOrcamentoViewModel toViewModel(ItemOrcamento item) {

@@ -31,6 +31,47 @@ O `oficina-billing-service` participa da Saga como autoridade financeira. Ele ge
 - Flyway para migrations
 - JWT, OpenAPI, Health, métricas Prometheus, logs JSON e OpenTelemetry
 
+## Arquitetura
+
+```mermaid
+flowchart LR
+  HTTP["APIs REST<br/>orçamentos e pagamentos"] --> Web["framework/web<br/>Resources e composição CDI"]
+  Web --> Controllers["interfaces/controllers"]
+  Controllers --> UseCases["core/usecases<br/>fluxos financeiros"]
+  UseCases --> Domain["core/entities<br/>Orçamento e Pagamento"]
+  UseCases --> Ports["core/interfaces<br/>portas de persistência,<br/>mensageria e pagamento"]
+  Controllers --> Presenters["interfaces/presenters"]
+  Presenters --> HTTP
+
+  Ports --> DBAdapter["framework/db"]
+  DBAdapter --> Postgres[("PostgreSQL oficina_billing<br/>orçamentos, pagamentos,<br/>Inbox, Outbox e idempotência")]
+  Ports --> Outbox["framework/messaging<br/>worker da Outbox"]
+  Outbox --> SNS["SNS<br/>eventos financeiros internos"]
+  SagaSNS["SNS<br/>comandos e eventos da Saga"] --> SQS["SQS do oficina-billing-service"]
+  SQS --> Consumers["consumers idempotentes"]
+  Consumers --> UseCases
+
+  Ports --> MPAdapter["framework/payments<br/>MercadoPagoPaymentProvider"]
+  MPAdapter --> MP["API Mercado Pago"]
+  MP -. "resposta do provedor<br/>não é evento de domínio" .-> MPAdapter
+  MPAdapter --> UseCases
+  UseCases --> Outbox
+
+  OS["oficina-os-service<br/>orquestrador da Saga"] --> SagaSNS
+  SNS --> OS
+
+  classDef core fill:#e5f5ec,stroke:#176b45,color:#14202b;
+  classDef adapter fill:#e7f1fa,stroke:#1f5f99,color:#14202b;
+  classDef data fill:#fff3d6,stroke:#7a4b00,color:#14202b;
+  classDef event fill:#f3e8ff,stroke:#6b21a8,color:#14202b;
+  class Domain,UseCases,Ports core;
+  class Web,Controllers,Presenters,DBAdapter,Outbox,Consumers,MPAdapter adapter;
+  class Postgres,MP data;
+  class SNS,SagaSNS,SQS,OS event;
+```
+
+O Mercado Pago é uma integração externa síncrona: sua resposta é mapeada para o domínio antes que a transação local e a Outbox produzam eventos internos. O Billing não altera diretamente o estado global da OS; essa autoridade permanece no orquestrador.
+
 ## Setup local
 
 Pré-requisitos:
