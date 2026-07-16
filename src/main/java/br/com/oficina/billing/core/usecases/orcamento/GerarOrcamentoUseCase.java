@@ -63,7 +63,7 @@ public class GerarOrcamentoUseCase {
                         "oficina.billing.orcamento-gerado",
                         "geradoEm",
                         now,
-                        null)
+                        command.correlationId())
                         .thenApply(ignored -> salvo));
     }
 
@@ -78,6 +78,9 @@ public class GerarOrcamentoUseCase {
                 BigDecimal.ZERO));
     }
 
-    public record Command(UUID ordemServicoId) {
+    public record Command(UUID ordemServicoId, String correlationId) {
+        public Command(UUID ordemServicoId) {
+            this(ordemServicoId, null);
+        }
     }
 }

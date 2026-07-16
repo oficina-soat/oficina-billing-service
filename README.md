@@ -220,7 +220,7 @@ O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
 
 Os repositórios de orçamento, pagamento, projeção financeira, eventos consumidos, idempotência e Outbox usam PostgreSQL por padrão, com migrations Flyway e seed limpo em `src/main/resources/db/migration/`. O modo em memória fica restrito ao profile de testes ou à execução local explícita documentada acima. Em `prod` e `lab`, a publicação e o consumo reais em SNS/SQS são obrigatórios.
 
-O serviço mantém uma projeção financeira local persistida por eventos, gera orçamento a partir do snapshot de peças e serviços da OS, registra eventos financeiros em Outbox PostgreSQL e possui consumer idempotente para os eventos de Saga definidos na plataforma.
+O serviço mantém uma projeção financeira local persistida por eventos. Ao consumir `diagnosticoFinalizado`, persiste o snapshot de peças e serviços e gera automaticamente o orçamento, publicando `orcamentoGerado` com a mesma correlação da jornada. A rota `POST /api/v1/orcamentos` permanece disponível para operação explícita. Um orçamento aceita no máximo um pagamento; nova tentativa para o mesmo `orcamentoId` retorna conflito canônico `DUPLICATE_RESOURCE`.
 
 ## Integração Mercado Pago
 
@@ -305,6 +305,7 @@ Ela cobre:
 
 - consumo idempotente de eventos por `eventId`;
 - projeção financeira de itens recebidos por eventos de OS e Execution;
+- geração automática do orçamento após `diagnosticoFinalizado`;
 - geração de Outbox para `orcamentoGerado`, `orcamentoAprovado`, `orcamentoRecusado`, `pagamentoSolicitado`, `pagamentoConfirmado` e `pagamentoRecusado`;
 - publicação de pendentes no SNS canônico, com retry/backoff, status `PUBLISHED` após sucesso e `FAILED` quando tentativas são esgotadas;
 - consumo por filas SQS com delete somente após persistência da projeção, idempotência ou comando financeiro.
@@ -323,4 +324,4 @@ Os nomes físicos de tópicos e filas seguem o padrão do `oficina-infra`: ponto
 
 ## Próximo Trabalho
 
-O backlog local está em [TODO.md](TODO.md). Os próximos incrementos esperados no Épico B2 são configurar a proteção da branch `main` e manter a documentação local atualizada conforme novos manifests, variáveis e evidências forem materializados.
+O [TODO.md](TODO.md) é o checklist histórico das entregas concluídas. Novos incrementos são controlados no [ROADMAP da plataforma](../oficina-platform/ROADMAP.md).

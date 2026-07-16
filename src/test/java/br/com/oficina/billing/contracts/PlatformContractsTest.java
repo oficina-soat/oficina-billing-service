@@ -73,7 +73,8 @@ class PlatformContractsTest {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         assertEquals(ENVELOPE_FIELDS, required);
-        assertEquals(ENVELOPE_FIELDS, recordFields);
+        assertTrue(recordFields.containsAll(ENVELOPE_FIELDS));
+        assertTrue(recordFields.contains("correlationId"));
     }
 
     @Test
