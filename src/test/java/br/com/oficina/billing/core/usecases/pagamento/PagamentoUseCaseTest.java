@@ -56,6 +56,23 @@ class PagamentoUseCaseTest {
     }
 
     @Test
+    void deveRejeitarSegundoPagamentoParaOMesmoOrcamento() {
+        var pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var service = registrarPagamentoUseCase(pagamentoRepository, gatewayNaoIntegrado());
+        var orcamento = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+        var command = new RegistrarPagamentoUseCase.Command(
+                orcamento.ordemServicoId(),
+                orcamento.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX);
+
+        service.executar(command).join();
+        var erro = assertFutureThrows(BusinessException.class, () -> service.executar(command));
+
+        assertEquals("DUPLICATE_RESOURCE", erro.code());
+    }
+
+    @Test
     void deveAplicarResultadosCriadoERecusadoRetornadosPeloGateway() {
         var pagamentoCriadoRepository = new InMemoryPagamentoDataSourceAdapter();
         var registrarPagamentoCriadoUseCase = registrarPagamentoUseCase(

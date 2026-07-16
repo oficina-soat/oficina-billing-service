@@ -46,7 +46,15 @@ public class RegistrarPagamentoUseCase {
     }
 
     public CompletableFuture<Pagamento> executar(Command command) {
-        return orcamentoRepository.findById(command.orcamentoId())
+        return pagamentoRepository.findByOrcamentoId(command.orcamentoId())
+                .thenCompose(existente -> {
+                    if (existente.isPresent()) {
+                        throw new BusinessException(
+                                "DUPLICATE_RESOURCE",
+                                "O orcamento informado ja possui pagamento registrado.");
+                    }
+                    return orcamentoRepository.findById(command.orcamentoId());
+                })
                 .thenCompose(optional -> {
                     var orcamento = optional.orElseThrow(() ->
                             new ResourceNotFoundException("Orcamento nao encontrado."));

@@ -2,6 +2,7 @@ package br.com.oficina.billing.framework.messaging;
 
 import br.com.oficina.billing.core.usecases.pagamento.CancelarPagamentosCriadosDaOrdemUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.SolicitarPagamentoDaOrdemUseCase;
+import br.com.oficina.billing.core.usecases.orcamento.GerarOrcamentoUseCase;
 import br.com.oficina.billing.framework.observability.StructuredLog;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.util.List;
@@ -28,14 +29,17 @@ public class BillingEventConsumer {
             "sagaFinalizadaComSucesso");
 
     private final BillingEventStore store;
+    private final GerarOrcamentoUseCase gerarOrcamentoUseCase;
     private final SolicitarPagamentoDaOrdemUseCase solicitarPagamentoDaOrdemUseCase;
     private final CancelarPagamentosCriadosDaOrdemUseCase cancelarPagamentosCriadosDaOrdemUseCase;
 
     public BillingEventConsumer(
             BillingEventStore store,
+            GerarOrcamentoUseCase gerarOrcamentoUseCase,
             SolicitarPagamentoDaOrdemUseCase solicitarPagamentoDaOrdemUseCase,
             CancelarPagamentosCriadosDaOrdemUseCase cancelarPagamentosCriadosDaOrdemUseCase) {
         this.store = store;
+        this.gerarOrcamentoUseCase = gerarOrcamentoUseCase;
         this.solicitarPagamentoDaOrdemUseCase = solicitarPagamentoDaOrdemUseCase;
         this.cancelarPagamentosCriadosDaOrdemUseCase = cancelarPagamentosCriadosDaOrdemUseCase;
     }
@@ -61,7 +65,11 @@ public class BillingEventConsumer {
         switch (envelope.eventType()) {
             case "pecaIncluidaNaOrdemDeServico" -> registrarPeca(envelope);
             case "servicoIncluidoNaOrdemDeServico" -> registrarServico(envelope);
-            case "diagnosticoFinalizado" -> registrarDiagnostico(envelope);
+            case "diagnosticoFinalizado" -> {
+                registrarDiagnostico(envelope);
+                gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(
+                        ordemServicoId(envelope), correlationId(envelope))).join();
+            }
             case "ordemDeServicoFinalizada", "execucaoFinalizada" ->
                     solicitarPagamentoDaOrdemUseCase.executar(
                             new SolicitarPagamentoDaOrdemUseCase.Command(ordemServicoId(envelope))).join();
@@ -122,6 +130,8 @@ public class BillingEventConsumer {
     }
 
     private String correlationId(DomainEventEnvelope envelope) {
-        return envelope.eventId().toString();
+        return envelope.correlationId() == null || envelope.correlationId().isBlank()
+                ? envelope.eventId().toString()
+                : envelope.correlationId();
     }
 }

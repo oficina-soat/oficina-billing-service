@@ -45,6 +45,7 @@ class BillingEventConsumerTest {
             new ConfirmarPagamentoUseCase(pagamentoRepository, store);
     private final BillingEventConsumer consumer = new BillingEventConsumer(
             store,
+            gerarOrcamentoUseCase,
             new SolicitarPagamentoDaOrdemUseCase(orcamentoRepository, pagamentoRepository, registrarPagamentoUseCase),
             new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
     private final OutboxPublisher publisher = new OutboxPublisher(store);
@@ -74,7 +75,7 @@ class BillingEventConsumerTest {
         assertTrue(consumer.consumir(eventoDiagnostico));
         assertFalse(consumer.consumir(eventoDiagnostico));
 
-        var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
+        var orcamento = orcamentoRepository.findByOrdemServicoId(ordemServicoId).join().getFirst();
 
         assertEquals(new BigDecimal("400.00"), orcamento.valorTotal());
         assertEquals(2, orcamento.itens().size());

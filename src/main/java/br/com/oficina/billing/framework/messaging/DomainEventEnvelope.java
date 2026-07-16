@@ -12,7 +12,19 @@ public record DomainEventEnvelope(
         OffsetDateTime occurredAt,
         String producer,
         String aggregateId,
+        String correlationId,
         Map<String, Object> payload) {
+
+    public DomainEventEnvelope(
+            UUID eventId,
+            String eventType,
+            int eventVersion,
+            OffsetDateTime occurredAt,
+            String producer,
+            String aggregateId,
+            Map<String, Object> payload) {
+        this(eventId, eventType, eventVersion, occurredAt, producer, aggregateId, null, payload);
+    }
 
     public DomainEventEnvelope {
         if (eventId == null) {

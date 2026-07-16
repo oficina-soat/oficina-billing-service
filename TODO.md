@@ -1,6 +1,8 @@
-# TODO do oficina-billing-service
+# Histórico de implementação do oficina-billing-service
 
-## Próximas Tarefas
+Este checklist registra o escopo já entregue. Novas tarefas são controladas no roadmap do `oficina-platform`, evitando dois backlogs concorrentes.
+
+## Entregas concluídas
 
 - [x] Criar domínio de Orçamento e itens financeiros.
 - [x] Criar domínio de aprovação e recusa de orçamento.
