@@ -6,11 +6,51 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 
 import io.quarkus.test.junit.QuarkusTest;
+import br.com.oficina.billing.framework.messaging.ApprovalTokenRecord;
+import br.com.oficina.billing.framework.messaging.BillingEventStore;
+import jakarta.inject.Inject;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class BillingResourceTest {
+    @Inject
+    BillingEventStore eventStore;
+
+    @Test
+    void shouldApproveBudgetThroughPublicOneTimeLink() throws Exception {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.fromString(given()
+                .header("X-Idempotency-Key", "publico-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("{\"ordemServicoId\":\"%s\"}".formatted(ordemServicoId))
+                .post("/api/v1/orcamentos").then().statusCode(201).extract().path("orcamentoId"));
+        var token = "token-publico-seguro";
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        var hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(token.getBytes(StandardCharsets.UTF_8)));
+        eventStore.substituirTokensAprovacao(ordemServicoId, orcamentoId, "cliente@example.com", List.of(
+                new ApprovalTokenRecord(UUID.randomUUID(), hash, "APROVAR", now, now.plusHours(1))));
+
+        given().queryParam("actionToken", token)
+                .get("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
+                .then().statusCode(200).contentType("text/html");
+        given().contentType("application/x-www-form-urlencoded")
+                .formParam("actionToken", token)
+                .formParam("motivo", "Aprovado pelo cliente")
+                .post("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
+                .then().statusCode(200).contentType("text/html");
+        given().contentType("application/x-www-form-urlencoded").formParam("actionToken", token)
+                .post("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
+                .then().statusCode(409);
+    }
+
     @Test
     void shouldRunBudgetApprovalAndPaymentFlow() {
         var ordemServicoId = UUID.randomUUID().toString();

@@ -214,6 +214,9 @@ O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
 - `GET /api/v1/ordens-servico/{ordemServicoId}/orcamentos`
 - `POST /api/v1/orcamentos/{orcamentoId}/aprovacao`
 - `POST /api/v1/orcamentos/{orcamentoId}/recusa`
+- `GET /api/v1/ordens-servico/{ordemServicoId}/acompanhar-link?actionToken=...`
+- `GET|POST /api/v1/ordens-servico/{ordemServicoId}/aprovar-link`
+- `GET|POST /api/v1/ordens-servico/{ordemServicoId}/recusar-link`
 - `POST /api/v1/pagamentos`
 - `GET /api/v1/pagamentos/{pagamentoId}`
 - `GET /api/v1/ordens-servico/{ordemServicoId}/pagamentos`
@@ -225,7 +228,7 @@ Os repositórios de orçamento, pagamento, projeção financeira, eventos consum
 
 O serviço mantém uma projeção financeira local persistida por eventos. Ao consumir `diagnosticoFinalizado`, persiste o snapshot de peças e serviços e gera automaticamente o orçamento, publicando `orcamentoGerado` com a mesma correlação da jornada. A rota `POST /api/v1/orcamentos` permanece disponível para operação explícita. Um orçamento aceita no máximo um pagamento; nova tentativa para o mesmo `orcamentoId` retorna conflito canônico `DUPLICATE_RESOURCE`.
 
-Ao consumir `ordemDeServicoCriada`, o serviço também projeta localmente o e-mail canônico do cliente. Após gerar o orçamento, cria links de acompanhamento, aprovação e recusa com tokens aleatórios de 256 bits, persiste apenas os hashes SHA-256 com validade de 24 horas e solicita a entrega à `oficina-notificacao-lambda`. Em `lab` e `prod`, as URLs pública e de notificação usam `OFICINA_AUTH_ISSUER` como fallback, podendo ser separadas com as variáveis abaixo.
+Ao consumir `ordemDeServicoCriada`, o serviço também projeta localmente o e-mail canônico do cliente. Após gerar o orçamento, cria links de acompanhamento, aprovação e recusa com tokens aleatórios de 256 bits, persiste apenas os hashes SHA-256 com validade de 24 horas e solicita a entrega à `oficina-notificacao-lambda`. As rotas públicas exibem HTML mínimo sem exigir sessão, revalidam token, ação, OS, expiração e uso antes de consultar ou decidir e registram aprovação ou recusa uma única vez. Em `lab` e `prod`, as URLs pública e de notificação usam `OFICINA_AUTH_ISSUER` como fallback, podendo ser separadas com as variáveis abaixo.
 
 ## Integração Mercado Pago
 

@@ -9,6 +9,7 @@ import br.com.oficina.billing.core.entities.ItemOrcamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
 import br.com.oficina.billing.framework.messaging.ApprovalTokenRecord;
+import br.com.oficina.billing.framework.messaging.ApprovalTokenGrant;
 import br.com.oficina.billing.framework.messaging.DomainEventEnvelope;
 import br.com.oficina.billing.framework.messaging.OutboxEventRecord;
 import br.com.oficina.billing.framework.observability.OperationalMetrics;
@@ -261,6 +262,46 @@ public class PostgresBillingEventStore implements BillingEventStore {
                 insert.executeBatch();
             }
             connection.commit();
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public Optional<ApprovalTokenGrant> buscarTokenAprovacao(String tokenHash) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement("""
+                        SELECT ordem_de_servico_id, orcamento_id, acao, expira_em, usado_em
+                        FROM orcamento_action_token WHERE token_hash = ?
+                        """)) {
+            statement.setString(1, tokenHash);
+            try (var resultSet = statement.executeQuery()) {
+                if (!resultSet.next()) {
+                    return Optional.empty();
+                }
+                return Optional.of(new ApprovalTokenGrant(
+                        uuid(resultSet, "ordem_de_servico_id"),
+                        uuid(resultSet, "orcamento_id"),
+                        resultSet.getString("acao"),
+                        offsetDateTime(resultSet, "expira_em"),
+                        nullableOffsetDateTime(resultSet, "usado_em")));
+            }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public boolean consumirTokenAprovacao(String tokenHash, OffsetDateTime usadoEm) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement("""
+                        UPDATE orcamento_action_token SET usado_em = ?
+                        WHERE token_hash = ? AND usado_em IS NULL AND expira_em > ?
+                        """)) {
+            statement.setObject(1, usadoEm);
+            statement.setString(2, tokenHash);
+            statement.setObject(3, usadoEm);
+            return statement.executeUpdate() == 1;
         } catch (SQLException exception) {
             throw persistenceFailure(exception);
         }

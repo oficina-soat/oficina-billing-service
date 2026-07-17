@@ -27,6 +27,10 @@ public interface BillingEventStore extends FinanceiroSnapshotGateway, OutboxEven
     void substituirTokensAprovacao(UUID ordemServicoId, UUID orcamentoId, String clienteEmail,
             List<ApprovalTokenRecord> tokens);
 
+    Optional<ApprovalTokenGrant> buscarTokenAprovacao(String tokenHash);
+
+    boolean consumirTokenAprovacao(String tokenHash, OffsetDateTime usadoEm);
+
     List<OutboxEventRecord> listarOutbox();
 
     List<OutboxEventRecord> publicarPendentes();
