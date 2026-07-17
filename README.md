@@ -59,15 +59,18 @@ flowchart LR
 
   OS["oficina-os-service<br/>orquestrador da Saga"] --> SagaSNS
   SNS --> OS
+  Web -. "métricas, traces e logs" .-> Telemetry["Coletor OTLP"]
 
   classDef core fill:#e5f5ec,stroke:#176b45,color:#14202b;
   classDef adapter fill:#e7f1fa,stroke:#1f5f99,color:#14202b;
   classDef data fill:#fff3d6,stroke:#7a4b00,color:#14202b;
   classDef event fill:#f3e8ff,stroke:#6b21a8,color:#14202b;
+  classDef observe fill:#fdeaea,stroke:#a22929,color:#14202b;
   class Domain,UseCases,Ports core;
-  class Web,Controllers,Presenters,DBAdapter,Outbox,Consumers,MPAdapter adapter;
+  class HTTP,Web,Controllers,Presenters,DBAdapter,Outbox,Consumers,MPAdapter adapter;
   class Postgres,MP data;
   class SNS,SagaSNS,SQS,OS event;
+  class Telemetry observe;
 ```
 
 O Mercado Pago é uma integração externa síncrona: sua resposta é mapeada para o domínio antes que a transação local e a Outbox produzam eventos internos. O Billing não altera diretamente o estado global da OS; essa autoridade permanece no orquestrador.
