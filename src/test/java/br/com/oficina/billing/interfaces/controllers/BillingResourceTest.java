@@ -49,6 +49,20 @@ class BillingResourceTest {
         given().contentType("application/x-www-form-urlencoded").formParam("actionToken", token)
                 .post("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
                 .then().statusCode(409);
+
+        var retryToken = "token-publico-retry";
+        var retryHash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(retryToken.getBytes(StandardCharsets.UTF_8)));
+        eventStore.substituirTokensAprovacao(ordemServicoId, orcamentoId, "cliente@example.com", List.of(
+                new ApprovalTokenRecord(UUID.randomUUID(), retryHash, "APROVAR", now, now.plusHours(1))));
+
+        given().contentType("application/x-www-form-urlencoded")
+                .formParam("actionToken", retryToken)
+                .post("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
+                .then().statusCode(409);
+        given().queryParam("actionToken", retryToken)
+                .get("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
+                .then().statusCode(200);
     }
 
     @Test

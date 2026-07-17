@@ -31,6 +31,8 @@ public interface BillingEventStore extends FinanceiroSnapshotGateway, OutboxEven
 
     boolean consumirTokenAprovacao(String tokenHash, OffsetDateTime usadoEm);
 
+    boolean liberarTokenAprovacao(String tokenHash, OffsetDateTime usadoEm);
+
     List<OutboxEventRecord> listarOutbox();
 
     List<OutboxEventRecord> publicarPendentes();

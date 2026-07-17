@@ -307,6 +307,21 @@ public class PostgresBillingEventStore implements BillingEventStore {
         }
     }
 
+    @Override
+    public boolean liberarTokenAprovacao(String tokenHash, OffsetDateTime usadoEm) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement("""
+                        UPDATE orcamento_action_token SET usado_em = NULL
+                        WHERE token_hash = ? AND usado_em = ?
+                        """)) {
+            statement.setString(1, tokenHash);
+            statement.setObject(2, usadoEm);
+            return statement.executeUpdate() == 1;
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
     private List<ItemOrcamento> snapshotFinanceiroBlocking(UUID ordemServicoId) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(SELECT_SNAPSHOT)) {

@@ -96,6 +96,11 @@ public class InMemoryBillingEventStore implements BillingEventStore {
     }
 
     @Override
+    public synchronized boolean liberarTokenAprovacao(String tokenHash, OffsetDateTime usadoEm) {
+        return tokensConsumidos.remove(tokenHash, usadoEm);
+    }
+
+    @Override
     public CompletableFuture<Void> registrarOutbox(
             String aggregateId,
             String eventType,
