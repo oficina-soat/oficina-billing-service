@@ -33,7 +33,7 @@ final class OrcamentoEventPayloads {
         }
         payload.put(timestampField, ocorridoEm.toString());
         return outboxEventSender.registrarOutbox(
-                orcamento.orcamentoId().toString(),
+                orcamento.ordemServicoId().toString(),
                 eventType,
                 topic,
                 payload,

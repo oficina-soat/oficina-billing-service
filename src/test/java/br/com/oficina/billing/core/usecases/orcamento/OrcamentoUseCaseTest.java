@@ -53,7 +53,7 @@ class OrcamentoUseCaseTest {
         assertTrue(eventStore.listarOutbox().stream().anyMatch(event ->
                 event.eventType().equals("orcamentoGerado")
                         && event.topic().equals("oficina.billing.orcamento-gerado")
-                        && event.aggregateId().equals(orcamento.orcamentoId().toString())));
+                        && event.aggregateId().equals(ordemServicoId.toString())));
     }
 
     @Test
@@ -61,6 +61,9 @@ class OrcamentoUseCaseTest {
         var aprovado = aprovar(gerar(UUID.randomUUID()).orcamentoId(), "Cliente aprovou");
 
         assertEquals(StatusOrcamento.APROVADO, aprovado.status());
+        assertTrue(eventStore.listarOutbox().stream().anyMatch(event ->
+                event.eventType().equals("orcamentoAprovado")
+                        && event.aggregateId().equals(aprovado.ordemServicoId().toString())));
         var orcamentoAprovadoId = aprovado.orcamentoId();
         var erroAprovacaoRepetida = assertFutureThrows(
                 BusinessException.class,
@@ -70,6 +73,9 @@ class OrcamentoUseCaseTest {
         var recusado = recusar(gerar(UUID.randomUUID()).orcamentoId(), "Cliente recusou");
 
         assertEquals(StatusOrcamento.RECUSADO, recusado.status());
+        assertTrue(eventStore.listarOutbox().stream().anyMatch(event ->
+                event.eventType().equals("orcamentoRecusado")
+                        && event.aggregateId().equals(recusado.ordemServicoId().toString())));
         var orcamentoRecusadoId = recusado.orcamentoId();
         var erroRecusaRepetida = assertFutureThrows(
                 BusinessException.class,
