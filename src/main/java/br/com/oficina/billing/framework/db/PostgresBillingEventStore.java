@@ -8,6 +8,7 @@ import static br.com.oficina.billing.framework.db.JdbcBillingRepositorySupport.u
 import br.com.oficina.billing.core.entities.ItemOrcamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
+import br.com.oficina.billing.framework.messaging.ApprovalTokenRecord;
 import br.com.oficina.billing.framework.messaging.DomainEventEnvelope;
 import br.com.oficina.billing.framework.messaging.OutboxEventRecord;
 import br.com.oficina.billing.framework.observability.OperationalMetrics;
@@ -28,6 +29,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import javax.sql.DataSource;
@@ -96,6 +98,18 @@ public class PostgresBillingEventStore implements BillingEventStore {
                 valor_unitario = EXCLUDED.valor_unitario,
                 valor_total = EXCLUDED.valor_total,
                 atualizado_em = EXCLUDED.atualizado_em
+            """;
+
+    private static final String UPSERT_CONTACT = """
+            INSERT INTO financeiro_ordem_projection (ordem_de_servico_id, cliente_email, atualizado_em)
+            VALUES (?, ?, ?)
+            ON CONFLICT (ordem_de_servico_id) DO UPDATE SET
+                cliente_email = EXCLUDED.cliente_email,
+                atualizado_em = EXCLUDED.atualizado_em
+            """;
+
+    private static final String SELECT_CONTACT = """
+            SELECT cliente_email FROM financeiro_ordem_projection WHERE ordem_de_servico_id = ?
             """;
 
     private static final String INSERT_OUTBOX = """
@@ -186,6 +200,70 @@ public class PostgresBillingEventStore implements BillingEventStore {
     public CompletableFuture<List<ItemOrcamento>> snapshotFinanceiro(UUID ordemServicoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
                 DATABASE, "financeiro_projection", "snapshot", () -> snapshotFinanceiroBlocking(ordemServicoId)));
+    }
+
+    @Override
+    public void registrarContato(UUID ordemServicoId, String clienteEmail) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(UPSERT_CONTACT)) {
+            statement.setObject(1, ordemServicoId);
+            statement.setString(2, clienteEmail);
+            statement.setObject(3, OffsetDateTime.now(ZoneOffset.UTC));
+            statement.executeUpdate();
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public Optional<String> buscarContato(UUID ordemServicoId) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(SELECT_CONTACT)) {
+            statement.setObject(1, ordemServicoId);
+            try (var resultSet = statement.executeQuery()) {
+                return resultSet.next() ? Optional.of(resultSet.getString(1)) : Optional.empty();
+            }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public void substituirTokensAprovacao(UUID ordemServicoId, UUID orcamentoId, String clienteEmail,
+            List<ApprovalTokenRecord> tokens) {
+        try (var connection = dataSource.getConnection()) {
+            connection.setAutoCommit(false);
+            try (var invalidate = connection.prepareStatement("""
+                    UPDATE orcamento_action_token SET usado_em = ?
+                    WHERE orcamento_id = ? AND usado_em IS NULL
+                    """)) {
+                invalidate.setObject(1, OffsetDateTime.now(ZoneOffset.UTC));
+                invalidate.setObject(2, orcamentoId);
+                invalidate.executeUpdate();
+            }
+            try (var insert = connection.prepareStatement("""
+                    INSERT INTO orcamento_action_token
+                        (token_id, ordem_de_servico_id, orcamento_id, cliente_email, acao,
+                         token_hash, criado_em, expira_em)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """)) {
+                for (var token : tokens) {
+                    insert.setObject(1, token.tokenId());
+                    insert.setObject(2, ordemServicoId);
+                    insert.setObject(3, orcamentoId);
+                    insert.setString(4, clienteEmail);
+                    insert.setString(5, token.action());
+                    insert.setString(6, token.tokenHash());
+                    insert.setObject(7, token.createdAt());
+                    insert.setObject(8, token.expiresAt());
+                    insert.addBatch();
+                }
+                insert.executeBatch();
+            }
+            connection.commit();
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
     }
 
     private List<ItemOrcamento> snapshotFinanceiroBlocking(UUID ordemServicoId) {

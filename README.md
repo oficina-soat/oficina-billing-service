@@ -222,6 +222,8 @@ Os repositórios de orçamento, pagamento, projeção financeira, eventos consum
 
 O serviço mantém uma projeção financeira local persistida por eventos. Ao consumir `diagnosticoFinalizado`, persiste o snapshot de peças e serviços e gera automaticamente o orçamento, publicando `orcamentoGerado` com a mesma correlação da jornada. A rota `POST /api/v1/orcamentos` permanece disponível para operação explícita. Um orçamento aceita no máximo um pagamento; nova tentativa para o mesmo `orcamentoId` retorna conflito canônico `DUPLICATE_RESOURCE`.
 
+Ao consumir `ordemDeServicoCriada`, o serviço também projeta localmente o e-mail canônico do cliente. Após gerar o orçamento, cria links de acompanhamento, aprovação e recusa com tokens aleatórios de 256 bits, persiste apenas os hashes SHA-256 com validade de 24 horas e solicita a entrega à `oficina-notificacao-lambda`. Em `lab` e `prod`, as URLs pública e de notificação usam `OFICINA_AUTH_ISSUER` como fallback, podendo ser separadas com as variáveis abaixo.
+
 ## Integração Mercado Pago
 
 A integração com Mercado Pago é opcional e fica desabilitada por padrão. Quando `OFICINA_MERCADO_PAGO_ENABLED=true`, o Access Token passa a ser obrigatório já na inicialização e o registro de pagamento PIX em `POST /api/v1/pagamentos` cria uma cobrança no endpoint `/v1/payments` do Mercado Pago usando `Authorization: Bearer` e `X-Idempotency-Key` com o `pagamentoId`.
@@ -259,6 +261,9 @@ As tentativas de integração expõem as métricas `payment.provider.enabled`, `
 - `OFICINA_MERCADO_PAGO_ACCESS_TOKEN`
 - `OFICINA_MERCADO_PAGO_PAYER_EMAIL`
 - `OFICINA_MERCADO_PAGO_API_URL`
+- `OFICINA_APPROVAL_NOTIFICATIONS_ENABLED`
+- `OFICINA_PUBLIC_API_URL`
+- `OFICINA_NOTIFICATION_API_URL`
 - `OFICINA_MESSAGING_ENABLED`
 - `OFICINA_MESSAGING_PUBLISHER_ENABLED`
 - `OFICINA_MESSAGING_CONSUMER_ENABLED`

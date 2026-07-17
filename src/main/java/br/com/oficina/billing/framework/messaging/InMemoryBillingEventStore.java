@@ -25,6 +25,8 @@ public class InMemoryBillingEventStore implements BillingEventStore {
     private static final String STATUS_PUBLISHED = "PUBLISHED";
 
     private final Map<UUID, LinkedHashMap<UUID, ItemOrcamento>> itensPorOrdemServico = new LinkedHashMap<>();
+    private final Map<UUID, String> contatosPorOrdemServico = new LinkedHashMap<>();
+    private final Map<UUID, List<ApprovalTokenRecord>> tokensPorOrcamento = new LinkedHashMap<>();
     private final Map<UUID, OutboxEventRecord> outboxEvents = new LinkedHashMap<>();
     private final LinkedHashSet<UUID> consumedEventIds = new LinkedHashSet<>();
 
@@ -53,6 +55,22 @@ public class InMemoryBillingEventStore implements BillingEventStore {
         itensPorOrdemServico
                 .computeIfAbsent(ordemServicoId, ignored -> new LinkedHashMap<>())
                 .put(item.itemId(), item);
+    }
+
+    @Override
+    public synchronized void registrarContato(UUID ordemServicoId, String clienteEmail) {
+        contatosPorOrdemServico.put(ordemServicoId, clienteEmail);
+    }
+
+    @Override
+    public synchronized java.util.Optional<String> buscarContato(UUID ordemServicoId) {
+        return java.util.Optional.ofNullable(contatosPorOrdemServico.get(ordemServicoId));
+    }
+
+    @Override
+    public synchronized void substituirTokensAprovacao(UUID ordemServicoId, UUID orcamentoId,
+            String clienteEmail, List<ApprovalTokenRecord> tokens) {
+        tokensPorOrcamento.put(orcamentoId, List.copyOf(tokens));
     }
 
     @Override

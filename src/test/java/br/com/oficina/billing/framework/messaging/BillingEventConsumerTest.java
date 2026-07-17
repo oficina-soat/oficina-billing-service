@@ -51,6 +51,19 @@ class BillingEventConsumerTest {
     private final OutboxPublisher publisher = new OutboxPublisher(store);
 
     @Test
+    void deveProjetarContatoRecebidoNaCriacaoDaOrdem() {
+        var ordemServicoId = UUID.randomUUID();
+        var evento = envelope(
+                UUID.randomUUID(),
+                "ordemDeServicoCriada",
+                ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId.toString(), "clienteEmail", "cliente@oficina.test"));
+
+        assertTrue(consumer.consumir(evento));
+        assertEquals("cliente@oficina.test", store.buscarContato(ordemServicoId).orElseThrow());
+    }
+
+    @Test
     void deveGerarOrcamentoComSnapshotFinanceiroEPublicarEventos() {
         var ordemServicoId = UUID.randomUUID();
         var eventoDiagnostico = envelope(
