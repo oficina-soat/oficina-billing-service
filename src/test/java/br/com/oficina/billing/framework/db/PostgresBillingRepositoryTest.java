@@ -277,6 +277,10 @@ class PostgresBillingRepositoryTest {
         assertTrue(eventStore.consumirTokenAprovacao(tokenHash, now.plusMinutes(1)));
         assertFalse(eventStore.consumirTokenAprovacao(tokenHash, now.plusMinutes(2)));
         assertFalse(eventStore.buscarTokenAprovacao(tokenHash).orElseThrow().disponivelEm(now.plusMinutes(2)));
+        assertFalse(eventStore.liberarTokenAprovacao(tokenHash, now.plusMinutes(2)));
+        assertTrue(eventStore.liberarTokenAprovacao(tokenHash, now.plusMinutes(1)));
+        assertTrue(eventStore.buscarTokenAprovacao(tokenHash).orElseThrow().disponivelEm(now.plusMinutes(2)));
+        assertTrue(eventStore.consumirTokenAprovacao(tokenHash, now.plusMinutes(2)));
 
         var replacementHash = "hash-token-substituto-" + UUID.randomUUID();
         eventStore.substituirTokensAprovacao(

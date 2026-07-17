@@ -37,9 +37,20 @@ public class PublicBudgetDecisionService {
             throw new TokenIndisponivelException("Este link ja foi utilizado ou expirou.");
         }
         var request = new OrcamentoController.DecisaoOrcamentoRequest(motivo);
-        return "APROVAR".equals(action)
-                ? controller.aprovarOrcamento(grant.orcamentoId(), request)
-                : controller.recusarOrcamento(grant.orcamentoId(), request);
+        CompletableFuture<Orcamento> decision;
+        try {
+            decision = "APROVAR".equals(action)
+                    ? controller.aprovarOrcamento(grant.orcamentoId(), request)
+                    : controller.recusarOrcamento(grant.orcamentoId(), request);
+        } catch (RuntimeException exception) {
+            store.liberarTokenAprovacao(hash, now);
+            throw exception;
+        }
+        return decision.whenComplete((ignored, failure) -> {
+            if (failure != null) {
+                store.liberarTokenAprovacao(hash, now);
+            }
+        });
     }
 
     private ApprovalTokenGrant validar(UUID ordemServicoId, String rawToken, String action) {
