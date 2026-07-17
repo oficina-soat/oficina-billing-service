@@ -52,6 +52,48 @@ class BillingResourceTest {
     }
 
     @Test
+    void shouldRefuseBudgetThroughPublicOneTimeLink() throws Exception {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.fromString(given()
+                .header("X-Idempotency-Key", "publico-recusa-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("{\"ordemServicoId\":\"%s\"}".formatted(ordemServicoId))
+                .post("/api/v1/orcamentos").then().statusCode(201).extract().path("orcamentoId"));
+        var token = "token-publico-recusa";
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        var hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(token.getBytes(StandardCharsets.UTF_8)));
+        eventStore.substituirTokensAprovacao(ordemServicoId, orcamentoId, "cliente@example.com", List.of(
+                new ApprovalTokenRecord(UUID.randomUUID(), hash, "RECUSAR", now, now.plusHours(1))));
+
+        given().contentType("application/x-www-form-urlencoded")
+                .formParam("actionToken", token)
+                .formParam("motivo", "Cliente solicitou novo diagnostico")
+                .post("/api/v1/ordens-servico/{ordemServicoId}/recusar-link", ordemServicoId)
+                .then().statusCode(200).contentType("text/html");
+        given().get("/api/v1/orcamentos/{orcamentoId}", orcamentoId)
+                .then().statusCode(200).body("status", equalTo("RECUSADO"));
+    }
+
+    @Test
+    void shouldRejectExpiredOrMismatchedPublicLinks() throws Exception {
+        var ordemServicoId = UUID.randomUUID();
+        var token = "token-expirado";
+        var hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(token.getBytes(StandardCharsets.UTF_8)));
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        eventStore.substituirTokensAprovacao(ordemServicoId, UUID.randomUUID(), "cliente@example.com", List.of(
+                new ApprovalTokenRecord(UUID.randomUUID(), hash, "APROVAR", now.minusHours(2), now.minusHours(1))));
+
+        given().queryParam("actionToken", token)
+                .get("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
+                .then().statusCode(401);
+        given().queryParam("actionToken", "token-inexistente")
+                .get("/api/v1/ordens-servico/{ordemServicoId}/recusar-link", ordemServicoId)
+                .then().statusCode(401);
+    }
+
+    @Test
     void shouldRunBudgetApprovalAndPaymentFlow() {
         var ordemServicoId = UUID.randomUUID().toString();
 

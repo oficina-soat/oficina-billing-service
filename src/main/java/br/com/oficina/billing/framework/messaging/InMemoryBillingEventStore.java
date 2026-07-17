@@ -87,7 +87,8 @@ public class InMemoryBillingEventStore implements BillingEventStore {
 
     @Override
     public synchronized boolean consumirTokenAprovacao(String tokenHash, OffsetDateTime usadoEm) {
-        if (tokensConsumidos.containsKey(tokenHash)) {
+        if (tokensConsumidos.containsKey(tokenHash)
+                || buscarTokenAprovacao(tokenHash).filter(token -> token.disponivelEm(usadoEm)).isEmpty()) {
             return false;
         }
         tokensConsumidos.put(tokenHash, usadoEm);
