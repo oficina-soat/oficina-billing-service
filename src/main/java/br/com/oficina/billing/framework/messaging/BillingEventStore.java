@@ -8,6 +8,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface BillingEventStore extends FinanceiroSnapshotGateway, OutboxEventSender {
@@ -18,6 +19,17 @@ public interface BillingEventStore extends FinanceiroSnapshotGateway, OutboxEven
     boolean eventoConsumido(UUID eventId);
 
     void registrarItem(UUID ordemServicoId, ItemOrcamento item);
+
+    void registrarContato(UUID ordemServicoId, String clienteEmail);
+
+    Optional<String> buscarContato(UUID ordemServicoId);
+
+    void substituirTokensAprovacao(UUID ordemServicoId, UUID orcamentoId, String clienteEmail,
+            List<ApprovalTokenRecord> tokens);
+
+    Optional<ApprovalTokenGrant> buscarTokenAprovacao(String tokenHash);
+
+    boolean consumirTokenAprovacao(String tokenHash, OffsetDateTime usadoEm);
 
     List<OutboxEventRecord> listarOutbox();
 

@@ -63,6 +63,7 @@ public class BillingEventConsumer {
 
     private void aplicarEvento(DomainEventEnvelope envelope) {
         switch (envelope.eventType()) {
+            case "ordemDeServicoCriada" -> registrarContato(envelope);
             case "pecaIncluidaNaOrdemDeServico" -> registrarPeca(envelope);
             case "servicoIncluidoNaOrdemDeServico" -> registrarServico(envelope);
             case "diagnosticoFinalizado" -> {
@@ -76,10 +77,17 @@ public class BillingEventConsumer {
             case "sagaCompensada" ->
                     cancelarPagamentosCriadosDaOrdemUseCase.executar(
                             new CancelarPagamentosCriadosDaOrdemUseCase.Command(ordemServicoId(envelope))).join();
-            case "ordemDeServicoCriada", "ordemDeServicoEntregue", "estoqueAcrescentado", "estoqueBaixado", "sagaFinalizadaComSucesso" -> {
+            case "ordemDeServicoEntregue", "estoqueAcrescentado", "estoqueBaixado", "sagaFinalizadaComSucesso" -> {
                 // Eventos registrados apenas para idempotencia e auditoria local neste incremento.
             }
             default -> throw new IllegalArgumentException("Evento nao suportado: " + envelope.eventType());
+        }
+    }
+
+    private void registrarContato(DomainEventEnvelope envelope) {
+        var email = envelope.payload().get("clienteEmail");
+        if (email != null && !email.toString().isBlank()) {
+            store.registrarContato(ordemServicoId(envelope), email.toString().trim());
         }
     }
 

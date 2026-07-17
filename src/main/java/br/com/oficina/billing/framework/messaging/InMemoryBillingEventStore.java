@@ -25,6 +25,9 @@ public class InMemoryBillingEventStore implements BillingEventStore {
     private static final String STATUS_PUBLISHED = "PUBLISHED";
 
     private final Map<UUID, LinkedHashMap<UUID, ItemOrcamento>> itensPorOrdemServico = new LinkedHashMap<>();
+    private final Map<UUID, String> contatosPorOrdemServico = new LinkedHashMap<>();
+    private final Map<UUID, List<ApprovalTokenRecord>> tokensPorOrcamento = new LinkedHashMap<>();
+    private final Map<String, OffsetDateTime> tokensConsumidos = new LinkedHashMap<>();
     private final Map<UUID, OutboxEventRecord> outboxEvents = new LinkedHashMap<>();
     private final LinkedHashSet<UUID> consumedEventIds = new LinkedHashSet<>();
 
@@ -53,6 +56,43 @@ public class InMemoryBillingEventStore implements BillingEventStore {
         itensPorOrdemServico
                 .computeIfAbsent(ordemServicoId, ignored -> new LinkedHashMap<>())
                 .put(item.itemId(), item);
+    }
+
+    @Override
+    public synchronized void registrarContato(UUID ordemServicoId, String clienteEmail) {
+        contatosPorOrdemServico.put(ordemServicoId, clienteEmail);
+    }
+
+    @Override
+    public synchronized java.util.Optional<String> buscarContato(UUID ordemServicoId) {
+        return java.util.Optional.ofNullable(contatosPorOrdemServico.get(ordemServicoId));
+    }
+
+    @Override
+    public synchronized void substituirTokensAprovacao(UUID ordemServicoId, UUID orcamentoId,
+            String clienteEmail, List<ApprovalTokenRecord> tokens) {
+        tokensPorOrcamento.put(orcamentoId, List.copyOf(tokens));
+    }
+
+    @Override
+    public synchronized java.util.Optional<ApprovalTokenGrant> buscarTokenAprovacao(String tokenHash) {
+        return tokensPorOrcamento.entrySet().stream()
+                .flatMap(entry -> entry.getValue().stream().map(token -> Map.entry(entry.getKey(), token)))
+                .filter(entry -> entry.getValue().tokenHash().equals(tokenHash))
+                .findFirst()
+                .map(entry -> new ApprovalTokenGrant(
+                        null, entry.getKey(), entry.getValue().action(), entry.getValue().expiresAt(),
+                        tokensConsumidos.get(tokenHash)));
+    }
+
+    @Override
+    public synchronized boolean consumirTokenAprovacao(String tokenHash, OffsetDateTime usadoEm) {
+        if (tokensConsumidos.containsKey(tokenHash)
+                || buscarTokenAprovacao(tokenHash).filter(token -> token.disponivelEm(usadoEm)).isEmpty()) {
+            return false;
+        }
+        tokensConsumidos.put(tokenHash, usadoEm);
+        return true;
     }
 
     @Override

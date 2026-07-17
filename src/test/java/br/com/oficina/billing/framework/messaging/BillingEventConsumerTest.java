@@ -51,6 +51,43 @@ class BillingEventConsumerTest {
     private final OutboxPublisher publisher = new OutboxPublisher(store);
 
     @Test
+    void deveProjetarContatoRecebidoNaCriacaoDaOrdem() {
+        var ordemServicoId = UUID.randomUUID();
+        var evento = envelope(
+                UUID.randomUUID(),
+                "ordemDeServicoCriada",
+                ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId.toString(), "clienteEmail", "cliente@oficina.test"));
+
+        assertTrue(consumer.consumir(evento));
+        assertEquals("cliente@oficina.test", store.buscarContato(ordemServicoId).orElseThrow());
+    }
+
+    @Test
+    void deveAceitarCriacaoSemContatoEUsarAggregateIdComoFallback() {
+        var ordemServicoId = UUID.randomUUID();
+        var evento = envelope(UUID.randomUUID(), "ordemDeServicoCriada", ordemServicoId, Map.of());
+
+        assertTrue(consumer.consumir(evento));
+        assertTrue(store.buscarContato(ordemServicoId).isEmpty());
+    }
+
+    @Test
+    void deveProjetarPecaEServicoRecebidosIndividualmente() {
+        var ordemServicoId = UUID.randomUUID();
+        var pecaId = UUID.randomUUID();
+        var servicoId = UUID.randomUUID();
+
+        assertTrue(consumer.consumir(envelope(UUID.randomUUID(), "pecaIncluidaNaOrdemDeServico", ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId, "peca", item("pecaId", pecaId, "Filtro")))));
+        assertTrue(consumer.consumir(envelope(UUID.randomUUID(), "servicoIncluidoNaOrdemDeServico", ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId, "servico", item("servicoId", servicoId, "Troca")))));
+
+        var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
+        assertEquals(2, orcamento.itens().size());
+    }
+
+    @Test
     void deveGerarOrcamentoComSnapshotFinanceiroEPublicarEventos() {
         var ordemServicoId = UUID.randomUUID();
         var eventoDiagnostico = envelope(
@@ -138,6 +175,26 @@ class BillingEventConsumerTest {
         var envelope = envelope(UUID.randomUUID(), "eventoInexistente", UUID.randomUUID(), Map.of());
 
         assertThrows(IllegalArgumentException.class, () -> consumer.consumir(envelope));
+    }
+
+    @Test
+    void deveRegistrarEventosSomenteParaAuditoriaECancelarPagamentosNaCompensacao() {
+        var ordemServicoId = UUID.randomUUID();
+        for (var eventType : List.of(
+                "ordemDeServicoEntregue", "estoqueAcrescentado", "estoqueBaixado", "sagaFinalizadaComSucesso")) {
+            assertTrue(consumer.consumir(envelope(UUID.randomUUID(), eventType, ordemServicoId, Map.of())));
+        }
+        assertTrue(consumer.consumir(envelope(
+                UUID.randomUUID(), "sagaCompensada", ordemServicoId, Map.of("ordemServicoId", ordemServicoId))));
+    }
+
+    private Map<String, Object> item(String idField, UUID id, String nome) {
+        return Map.of(
+                idField, id,
+                "nome", nome,
+                "quantidade", BigDecimal.ONE,
+                "valorUnitario", new BigDecimal("10.00"),
+                "valorTotal", new BigDecimal("10.00"));
     }
 
     private DomainEventEnvelope envelope(UUID eventId, String eventType, UUID ordemServicoId, Map<String, Object> payload) {

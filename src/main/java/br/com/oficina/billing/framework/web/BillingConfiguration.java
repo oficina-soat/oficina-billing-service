@@ -5,6 +5,7 @@ import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoGateway;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
+import br.com.oficina.billing.core.interfaces.sender.OrcamentoApprovalSender;
 import br.com.oficina.billing.core.usecases.orcamento.AprovarOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentosDaOrdemServicoUseCase;
@@ -34,8 +35,9 @@ public class BillingConfiguration {
     GerarOrcamentoUseCase gerarOrcamentoUseCase(
             OrcamentoRepositoryGateway repository,
             FinanceiroSnapshotGateway financeiroSnapshotGateway,
-            OutboxEventSender outboxEventSender) {
-        return new GerarOrcamentoUseCase(repository, financeiroSnapshotGateway, outboxEventSender);
+            OutboxEventSender outboxEventSender,
+            OrcamentoApprovalSender approvalSender) {
+        return new GerarOrcamentoUseCase(repository, financeiroSnapshotGateway, outboxEventSender, approvalSender);
     }
 
     @Produces

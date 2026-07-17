@@ -17,6 +17,7 @@ import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway
 import br.com.oficina.billing.framework.idempotency.IdempotencyRecord.ProcessingStatus;
 import br.com.oficina.billing.framework.idempotency.PersistentIdempotencyStore;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
+import br.com.oficina.billing.framework.messaging.ApprovalTokenRecord;
 import br.com.oficina.billing.framework.messaging.DomainEventEnvelope;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.common.QuarkusTestResource;
@@ -188,6 +189,9 @@ class PostgresBillingRepositoryTest {
         assertTrue(eventStore.registrarEventoConsumido(envelope));
         assertTrue(restartedStore.eventoConsumido(eventId));
         assertFalse(restartedStore.registrarEventoConsumido(envelope));
+        var legacyEventId = UUID.randomUUID();
+        assertTrue(restartedStore.registrarEventoConsumido(legacyEventId));
+        assertTrue(restartedStore.eventoConsumido(legacyEventId));
 
         eventStore.registrarOutbox(
                 ordemServicoId.toString(),
@@ -214,6 +218,74 @@ class PostgresBillingRepositoryTest {
         assertTrue(restartedStore.listarOutbox().stream()
                 .filter(event -> event.eventId().equals(pendente.eventId()))
                 .allMatch(event -> event.status().equals("PUBLISHED") && event.publishedAt() != null));
+
+        eventStore.registrarOutbox(
+                ordemServicoId.toString(),
+                "pagamentoSolicitado",
+                "oficina.billing.pagamento-solicitado",
+                Map.of("ordemServicoId", ordemServicoId.toString()),
+                null,
+                null).join();
+        var sujeitoAFalha = restartedStore.listarOutbox().stream()
+                .filter(event -> event.status().equals("PENDING") && !event.eventId().equals(pendente.eventId()))
+                .findFirst()
+                .orElseThrow();
+        var reagendado = restartedStore.marcarFalhaPublicacao(
+                sujeitoAFalha.eventId(), "endpoint indisponivel", OffsetDateTime.now(ZoneOffset.UTC), false);
+        assertEquals("PENDING", reagendado.status());
+        assertEquals(1, reagendado.attempts());
+        var falhaDefinitiva = restartedStore.marcarFalhaPublicacao(
+                sujeitoAFalha.eventId(), "limite de tentativas", null, true);
+        assertEquals("FAILED", falhaDefinitiva.status());
+        assertEquals(2, falhaDefinitiva.attempts());
+    }
+
+    @Test
+    void devePersistirContatoETokensDeAprovacaoComConsumoUnicoNoPostgreSQL() {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.randomUUID();
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        var tokenHash = "hash-token-postgres-" + UUID.randomUUID();
+
+        orcamentoRepository.save(new Orcamento(
+                orcamentoId,
+                ordemServicoId,
+                List.of(),
+                BigDecimal.ZERO,
+                StatusOrcamento.GERADO,
+                now,
+                now)).join();
+
+        assertTrue(eventStore.buscarContato(ordemServicoId).isEmpty());
+        eventStore.registrarContato(ordemServicoId, "cliente@oficina.test");
+        assertEquals("cliente@oficina.test", eventStore.buscarContato(ordemServicoId).orElseThrow());
+
+        eventStore.substituirTokensAprovacao(
+                ordemServicoId,
+                orcamentoId,
+                "cliente@oficina.test",
+                List.of(new ApprovalTokenRecord(
+                        UUID.randomUUID(), tokenHash, "APROVAR", now, now.plusHours(1))));
+
+        var grant = eventStore.buscarTokenAprovacao(tokenHash).orElseThrow();
+        assertEquals(ordemServicoId, grant.ordemServicoId());
+        assertEquals(orcamentoId, grant.orcamentoId());
+        assertEquals("APROVAR", grant.action());
+        assertTrue(grant.disponivelEm(now));
+        assertTrue(eventStore.buscarTokenAprovacao("hash-inexistente").isEmpty());
+
+        assertTrue(eventStore.consumirTokenAprovacao(tokenHash, now.plusMinutes(1)));
+        assertFalse(eventStore.consumirTokenAprovacao(tokenHash, now.plusMinutes(2)));
+        assertFalse(eventStore.buscarTokenAprovacao(tokenHash).orElseThrow().disponivelEm(now.plusMinutes(2)));
+
+        var replacementHash = "hash-token-substituto-" + UUID.randomUUID();
+        eventStore.substituirTokensAprovacao(
+                ordemServicoId,
+                orcamentoId,
+                "cliente@oficina.test",
+                List.of(new ApprovalTokenRecord(
+                        UUID.randomUUID(), replacementHash, "RECUSAR", now, now.plusHours(1))));
+        assertEquals("RECUSAR", eventStore.buscarTokenAprovacao(replacementHash).orElseThrow().action());
     }
 
     @Test

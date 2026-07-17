@@ -59,15 +59,18 @@ flowchart LR
 
   OS["oficina-os-service<br/>orquestrador da Saga"] --> SagaSNS
   SNS --> OS
+  Web -. "métricas, traces e logs" .-> Telemetry["Coletor OTLP"]
 
   classDef core fill:#e5f5ec,stroke:#176b45,color:#14202b;
   classDef adapter fill:#e7f1fa,stroke:#1f5f99,color:#14202b;
   classDef data fill:#fff3d6,stroke:#7a4b00,color:#14202b;
   classDef event fill:#f3e8ff,stroke:#6b21a8,color:#14202b;
+  classDef observe fill:#fdeaea,stroke:#a22929,color:#14202b;
   class Domain,UseCases,Ports core;
-  class Web,Controllers,Presenters,DBAdapter,Outbox,Consumers,MPAdapter adapter;
+  class HTTP,Web,Controllers,Presenters,DBAdapter,Outbox,Consumers,MPAdapter adapter;
   class Postgres,MP data;
   class SNS,SagaSNS,SQS,OS event;
+  class Telemetry observe;
 ```
 
 O Mercado Pago é uma integração externa síncrona: sua resposta é mapeada para o domínio antes que a transação local e a Outbox produzam eventos internos. O Billing não altera diretamente o estado global da OS; essa autoridade permanece no orquestrador.
@@ -211,6 +214,9 @@ O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
 - `GET /api/v1/ordens-servico/{ordemServicoId}/orcamentos`
 - `POST /api/v1/orcamentos/{orcamentoId}/aprovacao`
 - `POST /api/v1/orcamentos/{orcamentoId}/recusa`
+- `GET /api/v1/ordens-servico/{ordemServicoId}/acompanhar-link?actionToken=...`
+- `GET|POST /api/v1/ordens-servico/{ordemServicoId}/aprovar-link`
+- `GET|POST /api/v1/ordens-servico/{ordemServicoId}/recusar-link`
 - `POST /api/v1/pagamentos`
 - `GET /api/v1/pagamentos/{pagamentoId}`
 - `GET /api/v1/ordens-servico/{ordemServicoId}/pagamentos`
@@ -222,6 +228,8 @@ Os repositórios de orçamento, pagamento, projeção financeira, eventos consum
 
 O serviço mantém uma projeção financeira local persistida por eventos. Ao consumir `diagnosticoFinalizado`, persiste o snapshot de peças e serviços e gera automaticamente o orçamento, publicando `orcamentoGerado` com a mesma correlação da jornada. A rota `POST /api/v1/orcamentos` permanece disponível para operação explícita. Um orçamento aceita no máximo um pagamento; nova tentativa para o mesmo `orcamentoId` retorna conflito canônico `DUPLICATE_RESOURCE`.
 
+Ao consumir `ordemDeServicoCriada`, o serviço também projeta localmente o e-mail canônico do cliente. Após gerar o orçamento, cria links de acompanhamento, aprovação e recusa com tokens aleatórios de 256 bits, persiste apenas os hashes SHA-256 com validade de 24 horas e solicita a entrega à `oficina-notificacao-lambda`. As rotas públicas exibem HTML mínimo sem exigir sessão, revalidam token, ação, OS, expiração e uso antes de consultar ou decidir e registram aprovação ou recusa uma única vez. Em `lab` e `prod`, as URLs pública e de notificação usam `OFICINA_AUTH_ISSUER` como fallback, podendo ser separadas com as variáveis abaixo.
+
 ## Integração Mercado Pago
 
 A integração com Mercado Pago é opcional e fica desabilitada por padrão. Quando `OFICINA_MERCADO_PAGO_ENABLED=true`, o Access Token passa a ser obrigatório já na inicialização e o registro de pagamento PIX em `POST /api/v1/pagamentos` cria uma cobrança no endpoint `/v1/payments` do Mercado Pago usando `Authorization: Bearer` e `X-Idempotency-Key` com o `pagamentoId`.
@@ -232,7 +240,7 @@ Mapeamento de status do provedor:
 - `rejected`, `cancelled`, `refunded` ou `charged_back`: pagamento local `RECUSADO` e evento `pagamentoRecusado`;
 - demais estados, como `pending` e `in_process`: pagamento local permanece `CRIADO` com `provedor=mercado-pago` e `transacaoExternaId`.
 
-Na Fase 4, a chamada direta ao Mercado Pago cobre PIX. Cartão exige tokenização/dados de captura fora do contrato REST atual e deve permanecer para incremento posterior ou fluxo operacional manual.
+A integração atual com o Mercado Pago cobre PIX. Cartão exige tokenização ou dados de captura fora do contrato REST vigente e permanece como evolução posterior ou fluxo operacional manual.
 
 As tentativas de integração expõem as métricas `payment.provider.enabled`, `payment.provider.requests.count`, `payment.provider.request.duration`, `payment.provider.amount`, `payment.provider.failures.count` e `payment.provider.unavailable.count`, conforme o [Padrão de Observabilidade Distribuída](../oficina-platform/docs/observability/observability.md). Os desfechos ficam limitados a `confirmed`, `rejected`, `pending`, `failure` e `not_integrated`; status desconhecidos do provedor são agregados como `other`. Falhas usam somente as categorias `configuration`, `timeout`, `communication`, `provider_http_error`, `invalid_response`, `unsupported_method` e `business_rejection`. IDs de pagamento, ordem de serviço ou transação, CPF, e-mail e `correlationId` não são usados como dimensões.
 
@@ -259,6 +267,9 @@ As tentativas de integração expõem as métricas `payment.provider.enabled`, `
 - `OFICINA_MERCADO_PAGO_ACCESS_TOKEN`
 - `OFICINA_MERCADO_PAGO_PAYER_EMAIL`
 - `OFICINA_MERCADO_PAGO_API_URL`
+- `OFICINA_APPROVAL_NOTIFICATIONS_ENABLED`
+- `OFICINA_PUBLIC_API_URL`
+- `OFICINA_NOTIFICATION_API_URL`
 - `OFICINA_MESSAGING_ENABLED`
 - `OFICINA_MESSAGING_PUBLISHER_ENABLED`
 - `OFICINA_MESSAGING_CONSUMER_ENABLED`

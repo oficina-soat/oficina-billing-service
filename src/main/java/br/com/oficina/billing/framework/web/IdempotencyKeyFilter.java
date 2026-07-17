@@ -72,7 +72,7 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
 
     @Override
     public void filter(ContainerRequestContext requestContext) throws IOException {
-        if (!MUTATING_METHODS.contains(requestContext.getMethod())) {
+        if (!MUTATING_METHODS.contains(requestContext.getMethod()) || isPublicCapability(requestContext)) {
             return;
         }
 
@@ -109,6 +109,11 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
             return;
         }
         requestContext.setProperty(RECORD_PROPERTY, created);
+    }
+
+    private boolean isPublicCapability(ContainerRequestContext requestContext) {
+        var path = requestContext.getUriInfo().getPath();
+        return path.endsWith("/aprovar-link") || path.endsWith("/recusar-link");
     }
 
     @Override

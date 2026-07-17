@@ -7,6 +7,7 @@ import br.com.oficina.billing.core.entities.TipoItemOrcamento;
 import br.com.oficina.billing.core.interfaces.gateway.FinanceiroSnapshotGateway;
 import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
+import br.com.oficina.billing.core.interfaces.sender.OrcamentoApprovalSender;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -18,23 +19,34 @@ public class GerarOrcamentoUseCase {
     private final OrcamentoRepositoryGateway repository;
     private final FinanceiroSnapshotGateway financeiroSnapshotGateway;
     private final OutboxEventSender outboxEventSender;
+    private final OrcamentoApprovalSender approvalSender;
     private final Clock clock;
 
     public GerarOrcamentoUseCase(
             OrcamentoRepositoryGateway repository,
             FinanceiroSnapshotGateway financeiroSnapshotGateway,
             OutboxEventSender outboxEventSender) {
-        this(repository, financeiroSnapshotGateway, outboxEventSender, Clock.systemUTC());
+        this(repository, financeiroSnapshotGateway, outboxEventSender, OrcamentoApprovalSender.noop(), Clock.systemUTC());
+    }
+
+    public GerarOrcamentoUseCase(
+            OrcamentoRepositoryGateway repository,
+            FinanceiroSnapshotGateway financeiroSnapshotGateway,
+            OutboxEventSender outboxEventSender,
+            OrcamentoApprovalSender approvalSender) {
+        this(repository, financeiroSnapshotGateway, outboxEventSender, approvalSender, Clock.systemUTC());
     }
 
     GerarOrcamentoUseCase(
             OrcamentoRepositoryGateway repository,
             FinanceiroSnapshotGateway financeiroSnapshotGateway,
             OutboxEventSender outboxEventSender,
+            OrcamentoApprovalSender approvalSender,
             Clock clock) {
         this.repository = repository;
         this.financeiroSnapshotGateway = financeiroSnapshotGateway;
         this.outboxEventSender = outboxEventSender;
+        this.approvalSender = approvalSender;
         this.clock = clock;
     }
 
@@ -64,6 +76,7 @@ public class GerarOrcamentoUseCase {
                         "geradoEm",
                         now,
                         command.correlationId())
+                        .thenCompose(ignored -> approvalSender.enviar(salvo))
                         .thenApply(ignored -> salvo));
     }
 
