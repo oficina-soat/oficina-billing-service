@@ -54,4 +54,52 @@ class ConsultarDashboardFaturamentoUseCaseTest {
         assertEquals(1, result.contagensPagamentos().stream()
                 .filter(item -> item.status() == StatusPagamento.CRIADO).findFirst().orElseThrow().quantidade());
     }
+
+    @Test
+    void limitaEOrdenaAtencoesIgnorandoEstadosConcluidos() {
+        var orcamentos = mock(OrcamentoRepositoryGateway.class);
+        var pagamentos = mock(PagamentoRepositoryGateway.class);
+        var now = OffsetDateTime.parse("2026-07-17T18:30:00Z");
+        var budgets = java.util.stream.IntStream.range(0, 6)
+                .mapToObj(index -> budget(StatusOrcamento.GERADO, now.minusHours(6 - index)))
+                .toList();
+        var approved = budget(StatusOrcamento.APROVADO, now);
+        var refused = payment(StatusPagamento.RECUSADO, now.minusDays(1));
+        var confirmed = payment(StatusPagamento.CONFIRMADO, now);
+        when(orcamentos.findAll()).thenReturn(CompletableFuture.completedFuture(
+                java.util.stream.Stream.concat(budgets.stream(), java.util.stream.Stream.of(approved)).toList()));
+        when(pagamentos.findAll()).thenReturn(CompletableFuture.completedFuture(List.of(refused, confirmed)));
+
+        var result = new ConsultarDashboardFaturamentoUseCase(orcamentos, pagamentos).executar().join();
+
+        assertEquals(5, result.atencoes().size());
+        assertEquals("PAGAMENTO", result.atencoes().getFirst().tipo());
+        assertEquals("RECUSADO", result.atencoes().getFirst().status());
+        assertEquals(1, result.contagensOrcamentos().stream()
+                .filter(item -> item.status() == StatusOrcamento.APROVADO).findFirst().orElseThrow().quantidade());
+        assertEquals(1, result.contagensPagamentos().stream()
+                .filter(item -> item.status() == StatusPagamento.CONFIRMADO).findFirst().orElseThrow().quantidade());
+    }
+
+    private Orcamento budget(StatusOrcamento status, OffsetDateTime updatedAt) {
+        var item = mock(Orcamento.class);
+        when(item.status()).thenReturn(status);
+        when(item.ordemServicoId()).thenReturn(UUID.randomUUID());
+        when(item.orcamentoId()).thenReturn(UUID.randomUUID());
+        when(item.valorTotal()).thenReturn(BigDecimal.TEN);
+        when(item.atualizadoEm()).thenReturn(updatedAt);
+        when(item.acoesPermitidas()).thenReturn(List.of());
+        return item;
+    }
+
+    private Pagamento payment(StatusPagamento status, OffsetDateTime updatedAt) {
+        var item = mock(Pagamento.class);
+        when(item.status()).thenReturn(status);
+        when(item.ordemServicoId()).thenReturn(UUID.randomUUID());
+        when(item.pagamentoId()).thenReturn(UUID.randomUUID());
+        when(item.valor()).thenReturn(BigDecimal.ONE);
+        when(item.atualizadoEm()).thenReturn(updatedAt);
+        when(item.acoesPermitidas()).thenReturn(List.of());
+        return item;
+    }
 }
