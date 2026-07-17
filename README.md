@@ -237,7 +237,7 @@ Mapeamento de status do provedor:
 - `rejected`, `cancelled`, `refunded` ou `charged_back`: pagamento local `RECUSADO` e evento `pagamentoRecusado`;
 - demais estados, como `pending` e `in_process`: pagamento local permanece `CRIADO` com `provedor=mercado-pago` e `transacaoExternaId`.
 
-Na Fase 4, a chamada direta ao Mercado Pago cobre PIX. Cartão exige tokenização/dados de captura fora do contrato REST atual e deve permanecer para incremento posterior ou fluxo operacional manual.
+A integração atual com o Mercado Pago cobre PIX. Cartão exige tokenização ou dados de captura fora do contrato REST vigente e permanece como evolução posterior ou fluxo operacional manual.
 
 As tentativas de integração expõem as métricas `payment.provider.enabled`, `payment.provider.requests.count`, `payment.provider.request.duration`, `payment.provider.amount`, `payment.provider.failures.count` e `payment.provider.unavailable.count`, conforme o [Padrão de Observabilidade Distribuída](../oficina-platform/docs/observability/observability.md). Os desfechos ficam limitados a `confirmed`, `rejected`, `pending`, `failure` e `not_integrated`; status desconhecidos do provedor são agregados como `other`. Falhas usam somente as categorias `configuration`, `timeout`, `communication`, `provider_http_error`, `invalid_response`, `unsupported_method` e `business_rejection`. IDs de pagamento, ordem de serviço ou transação, CPF, e-mail e `correlationId` não são usados como dimensões.
 
