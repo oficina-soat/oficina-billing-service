@@ -14,4 +14,6 @@ public interface PagamentoRepositoryGateway {
     CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId);
 
     CompletableFuture<Optional<Pagamento>> findByOrcamentoId(UUID orcamentoId);
+
+    CompletableFuture<List<Pagamento>> findAll();
 }

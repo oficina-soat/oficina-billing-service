@@ -3,9 +3,10 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>br.com.oficina</groupId>
     <artifactId>oficina-billing-service</artifactId>
-    <version>1.5.2</version>
+    <version>1.6.0</version>
 
     <properties>
+        <mockito.version>5.21.0</mockito.version>
         <compiler-plugin.version>3.14.1</compiler-plugin.version>
         <failsafe-plugin.version>3.5.4</failsafe-plugin.version>
         <jacoco-plugin.version>0.8.13</jacoco-plugin.version>
@@ -42,6 +43,12 @@
     </dependencyManagement>
 
     <dependencies>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>

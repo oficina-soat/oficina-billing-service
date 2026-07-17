@@ -7,6 +7,7 @@ import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
 import br.com.oficina.billing.core.interfaces.sender.OrcamentoApprovalSender;
 import br.com.oficina.billing.core.usecases.orcamento.AprovarOrcamentoUseCase;
+import br.com.oficina.billing.core.usecases.dashboard.ConsultarDashboardFaturamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentosDaOrdemServicoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.GerarOrcamentoUseCase;
@@ -30,6 +31,14 @@ import jakarta.enterprise.inject.Produces;
 
 @ApplicationScoped
 public class BillingConfiguration {
+    @Produces
+    @ApplicationScoped
+    ConsultarDashboardFaturamentoUseCase consultarDashboardFaturamentoUseCase(
+            OrcamentoRepositoryGateway orcamentos,
+            PagamentoRepositoryGateway pagamentos) {
+        return new ConsultarDashboardFaturamentoUseCase(orcamentos, pagamentos);
+    }
+
     @Produces
     @ApplicationScoped
     GerarOrcamentoUseCase gerarOrcamentoUseCase(

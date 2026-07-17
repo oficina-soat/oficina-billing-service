@@ -12,4 +12,6 @@ public interface OrcamentoRepositoryGateway {
     CompletableFuture<Optional<Orcamento>> findById(UUID orcamentoId);
 
     CompletableFuture<List<Orcamento>> findByOrdemServicoId(UUID ordemServicoId);
+
+    CompletableFuture<List<Orcamento>> findAll();
 }
