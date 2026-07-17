@@ -101,6 +101,8 @@ class PostgresBillingRepositoryTest {
                 .map(Orcamento::orcamentoId)
                 .toList());
         assertTrue(orcamentoRepository.findById(UUID.randomUUID()).join().isEmpty());
+        assertTrue(orcamentoRepository.findAll().join().stream()
+                .anyMatch(item -> item.orcamentoId().equals(orcamentoId)));
 
         var aprovado = new Orcamento(
                 orcamentoId,
@@ -135,6 +137,8 @@ class PostgresBillingRepositoryTest {
                 .map(Pagamento::pagamentoId)
                 .toList());
         assertTrue(pagamentoRepository.findById(UUID.randomUUID()).join().isEmpty());
+        assertTrue(pagamentoRepository.findAll().join().stream()
+                .anyMatch(item -> item.pagamentoId().equals(pagamentoId)));
 
         var confirmado = new Pagamento(
                 pagamentoId,

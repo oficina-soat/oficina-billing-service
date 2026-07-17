@@ -72,6 +72,12 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
             FROM pagamento
             WHERE orcamento_id = ?
             """;
+    private static final String SELECT_PAGAMENTOS = """
+            SELECT id, ordem_de_servico_id, orcamento_id, valor, metodo, status, provedor,
+                   transacao_externa_id, criado_em, atualizado_em
+            FROM pagamento
+            ORDER BY atualizado_em
+            """;
 
     private final DataSource dataSource;
     private final OperationalMetrics metrics;
@@ -156,6 +162,26 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
                 }
                 return Optional.of(toPagamento(resultSet));
             }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public CompletableFuture<List<Pagamento>> findAll() {
+        return CompletableFuture.completedFuture(metrics.persistence(
+                DATABASE, RESOURCE, "find_all", this::findAllBlocking));
+    }
+
+    private List<Pagamento> findAllBlocking() {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(SELECT_PAGAMENTOS);
+                var resultSet = statement.executeQuery()) {
+            var pagamentos = new ArrayList<Pagamento>();
+            while (resultSet.next()) {
+                pagamentos.add(toPagamento(resultSet));
+            }
+            return List.copyOf(pagamentos);
         } catch (SQLException exception) {
             throw persistenceFailure(exception);
         }

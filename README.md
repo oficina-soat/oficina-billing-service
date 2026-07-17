@@ -223,6 +223,7 @@ O domínio financeiro inicial expõe as rotas canônicas da OpenAPI:
 - `POST /api/v1/pagamentos/{pagamentoId}/confirmacao`
 - `POST /api/v1/pagamentos/{pagamentoId}/recusa`
 - `POST /api/v1/pagamentos/{pagamentoId}/cancelamento`
+- `GET /api/v1/dashboard/faturamento`: retorna contagens e até cinco atenções financeiras para `administrativo` e `recepcionista`.
 
 Os repositórios de orçamento, pagamento, projeção financeira, eventos consumidos, idempotência e Outbox usam PostgreSQL por padrão, com migrations Flyway e seed limpo em `src/main/resources/db/migration/`. O modo em memória fica restrito ao profile de testes ou à execução local explícita documentada acima. Em `prod` e `lab`, a publicação e o consumo reais em SNS/SQS são obrigatórios.
 

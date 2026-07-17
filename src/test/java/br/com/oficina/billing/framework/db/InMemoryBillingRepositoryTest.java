@@ -30,6 +30,7 @@ class InMemoryBillingRepositoryTest {
 
         assertEquals(primeiro, repository.findById(primeiro.orcamentoId()).join().orElseThrow());
         assertEquals(List.of(primeiro, segundo), repository.findByOrdemServicoId(ordemServicoId).join());
+        assertEquals(List.of(primeiro, segundo), repository.findAll().join());
         assertTrue(repository.findById(UUID.randomUUID()).join().isEmpty());
     }
 
@@ -44,6 +45,7 @@ class InMemoryBillingRepositoryTest {
 
         assertEquals(pagamento, repository.findById(pagamento.pagamentoId()).join().orElseThrow());
         assertEquals(List.of(pagamento), repository.findByOrdemServicoId(ordemServicoId).join());
+        assertEquals(List.of(pagamento), repository.findAll().join());
         assertEquals(pagamento, repository.findByOrcamentoId(orcamentoId).join().orElseThrow());
         assertTrue(repository.findByOrcamentoId(UUID.randomUUID()).join().isEmpty());
     }

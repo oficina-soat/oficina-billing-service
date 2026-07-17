@@ -73,6 +73,11 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
             WHERE ordem_de_servico_id = ?
             ORDER BY criado_em
             """;
+    private static final String SELECT_ORCAMENTOS = """
+            SELECT id, ordem_de_servico_id, valor_total, status, criado_em, atualizado_em
+            FROM orcamento
+            ORDER BY atualizado_em
+            """;
 
     private static final String SELECT_ITENS = """
             SELECT tipo, item_id, referencia_catalogo_id, nome, quantidade, valor_unitario, valor_total
@@ -146,6 +151,26 @@ public class PostgresOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
                 }
                 return List.copyOf(orcamentos);
             }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public CompletableFuture<List<Orcamento>> findAll() {
+        return CompletableFuture.completedFuture(metrics.persistence(
+                DATABASE, RESOURCE, "find_all", this::findAllBlocking));
+    }
+
+    private List<Orcamento> findAllBlocking() {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(SELECT_ORCAMENTOS);
+                var resultSet = statement.executeQuery()) {
+            var orcamentos = new ArrayList<Orcamento>();
+            while (resultSet.next()) {
+                orcamentos.add(toOrcamento(connection, resultSet));
+            }
+            return List.copyOf(orcamentos);
         } catch (SQLException exception) {
             throw persistenceFailure(exception);
         }

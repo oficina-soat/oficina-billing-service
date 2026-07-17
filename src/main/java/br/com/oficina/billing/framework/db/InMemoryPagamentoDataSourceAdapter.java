@@ -43,4 +43,11 @@ public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGa
                 .findFirst();
         return CompletableFuture.completedFuture(encontrado);
     }
+
+    @Override
+    public CompletableFuture<List<Pagamento>> findAll() {
+        return CompletableFuture.completedFuture(storage.values().stream()
+                .sorted(Comparator.comparing(Pagamento::atualizadoEm))
+                .toList());
+    }
 }

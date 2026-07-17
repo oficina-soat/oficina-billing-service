@@ -35,4 +35,11 @@ public class InMemoryOrcamentoDataSourceAdapter implements OrcamentoRepositoryGa
                 .toList();
         return CompletableFuture.completedFuture(orcamentos);
     }
+
+    @Override
+    public CompletableFuture<List<Orcamento>> findAll() {
+        return CompletableFuture.completedFuture(storage.values().stream()
+                .sorted(Comparator.comparing(Orcamento::atualizadoEm))
+                .toList());
+    }
 }
