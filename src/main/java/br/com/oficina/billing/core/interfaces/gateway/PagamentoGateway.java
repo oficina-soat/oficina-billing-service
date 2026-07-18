@@ -5,4 +5,8 @@ import java.util.concurrent.CompletableFuture;
 
 public interface PagamentoGateway {
     CompletableFuture<PagamentoGatewayResult> solicitar(Pagamento pagamento);
+
+    default CompletableFuture<PagamentoGatewayResult> consultar(Pagamento pagamento) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("Consulta nao suportada."));
+    }
 }

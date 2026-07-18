@@ -9,6 +9,7 @@ import br.com.oficina.billing.core.usecases.pagamento.ConsultarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.ConsultarPagamentosDaOrdemServicoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.RecusarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.RegistrarPagamentoUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.ReconciliarPagamentoUseCase;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +22,7 @@ public class PagamentoController {
     private final ConfirmarPagamentoUseCase confirmarPagamentoUseCase;
     private final RecusarPagamentoUseCase recusarPagamentoUseCase;
     private final CancelarPagamentoUseCase cancelarPagamentoUseCase;
+    private final ReconciliarPagamentoUseCase reconciliarPagamentoUseCase;
 
     public PagamentoController(
             RegistrarPagamentoUseCase registrarPagamentoUseCase,
@@ -29,12 +31,31 @@ public class PagamentoController {
             ConfirmarPagamentoUseCase confirmarPagamentoUseCase,
             RecusarPagamentoUseCase recusarPagamentoUseCase,
             CancelarPagamentoUseCase cancelarPagamentoUseCase) {
+        this(
+                registrarPagamentoUseCase,
+                consultarPagamentoUseCase,
+                consultarPagamentosDaOrdemServicoUseCase,
+                confirmarPagamentoUseCase,
+                recusarPagamentoUseCase,
+                cancelarPagamentoUseCase,
+                null);
+    }
+
+    public PagamentoController(
+            RegistrarPagamentoUseCase registrarPagamentoUseCase,
+            ConsultarPagamentoUseCase consultarPagamentoUseCase,
+            ConsultarPagamentosDaOrdemServicoUseCase consultarPagamentosDaOrdemServicoUseCase,
+            ConfirmarPagamentoUseCase confirmarPagamentoUseCase,
+            RecusarPagamentoUseCase recusarPagamentoUseCase,
+            CancelarPagamentoUseCase cancelarPagamentoUseCase,
+            ReconciliarPagamentoUseCase reconciliarPagamentoUseCase) {
         this.registrarPagamentoUseCase = registrarPagamentoUseCase;
         this.consultarPagamentoUseCase = consultarPagamentoUseCase;
         this.consultarPagamentosDaOrdemServicoUseCase = consultarPagamentosDaOrdemServicoUseCase;
         this.confirmarPagamentoUseCase = confirmarPagamentoUseCase;
         this.recusarPagamentoUseCase = recusarPagamentoUseCase;
         this.cancelarPagamentoUseCase = cancelarPagamentoUseCase;
+        this.reconciliarPagamentoUseCase = reconciliarPagamentoUseCase;
     }
 
     public CompletableFuture<Pagamento> registrarPagamento(PagamentoCreateRequest request) {
@@ -73,6 +94,14 @@ public class PagamentoController {
         return cancelarPagamentoUseCase.executar(new CancelarPagamentoUseCase.Command(
                 pagamentoId,
                 request == null ? null : request.motivo()));
+    }
+
+    public CompletableFuture<Pagamento> reconciliarPagamento(UUID pagamentoId) {
+        return reconciliarPagamentoUseCase.executar(new ReconciliarPagamentoUseCase.Command(pagamentoId));
+    }
+
+    public CompletableFuture<Pagamento> reconciliarPagamentoPorTransacao(String transacaoExternaId) {
+        return reconciliarPagamentoUseCase.executarPorTransacaoExternaId(transacaoExternaId);
     }
 
     private void validar(PagamentoCreateRequest request) {

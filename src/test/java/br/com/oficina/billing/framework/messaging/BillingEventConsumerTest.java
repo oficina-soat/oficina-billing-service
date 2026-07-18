@@ -356,7 +356,7 @@ class BillingEventConsumerTest {
                 BigDecimal.ZERO,
                 MetodoPagamento.PIX)).join();
         confirmarPagamentoUseCase.executar(
-                new ConfirmarPagamentoUseCase.Command(pagamento.pagamentoId(), "mercado-pago", "mp-test")).join();
+                new ConfirmarPagamentoUseCase.Command(pagamento.pagamentoId(), "manual", "comprovante-test")).join();
 
         var publicados = publisher.publicarPendentes();
 

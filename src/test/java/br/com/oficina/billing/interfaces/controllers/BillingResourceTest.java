@@ -197,8 +197,8 @@ class BillingResourceTest {
                 .contentType("application/json")
                 .body("""
                         {
-                          "provedor": "mercado-pago",
-                          "transacaoExternaId": "mp-test-001"
+                          "provedor": "manual",
+                          "transacaoExternaId": "comprovante-test-001"
                         }
                         """)
                 .when()
@@ -207,8 +207,8 @@ class BillingResourceTest {
                 .statusCode(200)
                 .body("status", equalTo("CONFIRMADO"))
                 .body("acoesPermitidas", hasSize(0))
-                .body("provedor", equalTo("mercado-pago"))
-                .body("transacaoExternaId", equalTo("mp-test-001"));
+                .body("provedor", equalTo("manual"))
+                .body("transacaoExternaId", equalTo("comprovante-test-001"));
 
         given()
                 .when()
@@ -302,7 +302,7 @@ class BillingResourceTest {
                 .contentType("application/json")
                 .body("""
                         {
-                          "provedor": "mercado-pago",
+                          "provedor": "manual",
                           "motivo": "Pagamento recusado pelo provedor"
                         }
                         """)
@@ -312,7 +312,7 @@ class BillingResourceTest {
                 .statusCode(200)
                 .body("pagamentoId", equalTo(pagamento.pagamentoId()))
                 .body("status", equalTo("RECUSADO"))
-                .body("provedor", equalTo("mercado-pago"));
+                .body("provedor", equalTo("manual"));
 
         given()
                 .when()

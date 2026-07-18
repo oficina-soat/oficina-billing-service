@@ -126,6 +126,7 @@ public class RuntimeDependenciesValidator {
         private final String awsSessionToken;
         private final boolean mercadoPagoEnabled;
         private final String mercadoPagoAccessToken;
+        private final String mercadoPagoWebhookSecret;
         private final String mercadoPagoPayerEmail;
         private final String mercadoPagoApiUrl;
 
@@ -152,6 +153,7 @@ public class RuntimeDependenciesValidator {
             awsSessionToken = value(config, "oficina.messaging.aws-session-token");
             mercadoPagoEnabled = booleanValue(config, "oficina.mercado-pago.enabled", false);
             mercadoPagoAccessToken = value(config, "oficina.mercado-pago.access-token");
+            mercadoPagoWebhookSecret = value(config, "oficina.mercado-pago.webhook-secret");
             mercadoPagoPayerEmail = value(config, "oficina.mercado-pago.payer-email");
             mercadoPagoApiUrl = value(config, "quarkus.rest-client.mercado-pago-api.url");
         }
@@ -188,6 +190,7 @@ public class RuntimeDependenciesValidator {
             validateAwsCredentials(violations);
             if (mercadoPagoEnabled) {
                 require(mercadoPagoAccessToken, "OFICINA_MERCADO_PAGO_ACCESS_TOKEN", violations);
+                require(mercadoPagoWebhookSecret, "OFICINA_MERCADO_PAGO_WEBHOOK_SECRET", violations);
                 require(mercadoPagoPayerEmail, "OFICINA_MERCADO_PAGO_PAYER_EMAIL", violations);
                 require(mercadoPagoApiUrl, "OFICINA_MERCADO_PAGO_API_URL", violations);
             }

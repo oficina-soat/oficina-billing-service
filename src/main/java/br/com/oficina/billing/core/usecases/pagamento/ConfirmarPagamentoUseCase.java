@@ -35,6 +35,7 @@ public class ConfirmarPagamentoUseCase {
                                 "INVALID_STATE_TRANSITION",
                                 "Somente pagamentos criados podem ser confirmados.");
                     }
+                    validarPagamentoManual(pagamento, command.provedor());
                     return PagamentoStatusUpdater.atualizarStatus(
                             repository,
                             clock,
@@ -51,6 +52,15 @@ public class ConfirmarPagamentoUseCase {
                         null,
                         null))
                         .thenApply(ignored -> atualizado));
+    }
+
+    private void validarPagamentoManual(Pagamento pagamento, String provedorInformado) {
+        if ((pagamento.provedor() != null && !pagamento.provedor().isBlank())
+                || "mercado-pago".equalsIgnoreCase(provedorInformado)) {
+            throw new BusinessException(
+                    "INVALID_STATE_TRANSITION",
+                    "Pagamentos integrados devem ser confirmados por reconciliacao com o provedor.");
+        }
     }
 
     public record Command(UUID pagamentoId, String provedor, String transacaoExternaId) {

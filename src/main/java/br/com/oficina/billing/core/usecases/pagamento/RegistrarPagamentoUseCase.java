@@ -353,7 +353,8 @@ public class RegistrarPagamentoUseCase {
                         pagamento,
                         resultado.status(),
                         resultado.provedor(),
-                        resultado.transacaoExternaId())
+                        resultado.transacaoExternaId(),
+                        resultado.instrucoesPix())
                 .thenCompose(atualizado -> registrarEventoResultadoGateway(atualizado, resultado));
     }
 

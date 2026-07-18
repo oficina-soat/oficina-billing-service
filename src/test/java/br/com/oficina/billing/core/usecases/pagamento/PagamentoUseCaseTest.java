@@ -279,11 +279,11 @@ class PagamentoUseCaseTest {
 
         var recusado = recusarPagamentoUseCase.executar(new RecusarPagamentoUseCase.Command(
                 pagamento.pagamentoId(),
-                "mercado-pago",
+                "manual",
                 "Cartao recusado")).join();
 
         assertEquals(StatusPagamento.RECUSADO, recusado.status());
-        assertEquals("mercado-pago", recusado.provedor());
+        assertEquals("manual", recusado.provedor());
         assertTrue(eventStore.listarOutbox().stream().anyMatch(event ->
                 event.eventType().equals("pagamentoRecusado")
                         && event.payload().get("motivo").equals("Cartao recusado")));
@@ -291,7 +291,7 @@ class PagamentoUseCaseTest {
         var erroEstado = assertFutureThrows(BusinessException.class, () ->
                 recusarPagamentoUseCase.executar(new RecusarPagamentoUseCase.Command(
                         recusado.pagamentoId(),
-                        "mercado-pago",
+                        "manual",
                         "Nova tentativa")));
         assertEquals("INVALID_STATE_TRANSITION", erroEstado.code());
     }
@@ -359,8 +359,8 @@ class PagamentoUseCaseTest {
                 MetodoPagamento.PIX)).join();
         confirmarPagamentoUseCase.executar(new ConfirmarPagamentoUseCase.Command(
                 pagamentoConfirmado.pagamentoId(),
-                "mercado-pago",
-                "mp-confirmado-002")).join();
+                "manual",
+                "comprovante-confirmado-002")).join();
 
         var cancelados = cancelarPagamentosCriadosUseCase.executar(
                 new CancelarPagamentosCriadosDaOrdemUseCase.Command(ordemServicoId)).join();

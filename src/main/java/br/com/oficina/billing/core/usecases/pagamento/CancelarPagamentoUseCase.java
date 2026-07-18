@@ -35,6 +35,11 @@ public class CancelarPagamentoUseCase {
                                 "INVALID_STATE_TRANSITION",
                                 "Somente pagamentos criados podem ser cancelados.");
                     }
+                    if (pagamento.provedor() != null && !pagamento.provedor().isBlank()) {
+                        throw new BusinessException(
+                                "INVALID_STATE_TRANSITION",
+                                "Pagamentos integrados devem ser atualizados por reconciliacao com o provedor.");
+                    }
                     return PagamentoStatusUpdater.atualizarStatus(
                             repository,
                             clock,

@@ -8,6 +8,7 @@ import br.com.oficina.billing.interfaces.presenters.view_model.PagamentoViewMode
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -104,6 +105,18 @@ public class PagamentoResource {
             @PathParam("pagamentoId") UUID pagamentoId,
             PagamentoController.CancelamentoRequest request) {
         return toUni(() -> pagamentoController.cancelarPagamento(pagamentoId, request)
+                .thenApply(pagamento -> {
+                    pagamentoPresenter.present(pagamento);
+                    return pagamentoPresenter.viewModel();
+                }));
+    }
+
+    @POST
+    @Path("/pagamentos/{pagamentoId}/reconciliacao")
+    @RolesAllowed({"administrativo", "recepcionista"})
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
+    public Uni<PagamentoViewModel> reconciliarPagamento(@PathParam("pagamentoId") UUID pagamentoId) {
+        return toUni(() -> pagamentoController.reconciliarPagamento(pagamentoId)
                 .thenApply(pagamento -> {
                     pagamentoPresenter.present(pagamento);
                     return pagamentoPresenter.viewModel();

@@ -221,6 +221,50 @@ class MercadoPagoPagamentoGatewayTest {
         assertLowCardinalityTags();
     }
 
+    @Test
+    void deveConsultarPagamentoEPreservarInstrucoesPixPendentes() {
+        var expiration = OffsetDateTime.parse("2026-01-01T12:30:00Z");
+        MercadoPagoQueryClient queryClient = (authorization, paymentId) -> {
+            assertEquals("Bearer token-teste", authorization);
+            assertEquals("123456", paymentId);
+            return new MercadoPagoPaymentResponse(
+                    123456L,
+                    "pending",
+                    "pending_waiting_payment",
+                    expiration,
+                    new MercadoPagoPaymentResponse.PointOfInteraction(
+                            new MercadoPagoPaymentResponse.TransactionData(
+                                    "pix-copia-e-cola", "base64", "https://example.test/pix")));
+        };
+        var gateway = new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) -> {
+                    throw new AssertionError("Criacao nao deveria ser chamada.");
+                },
+                queryClient,
+                new MercadoPagoMetrics(registry, true, "test"),
+                true,
+                Optional.of("token-teste"),
+                "cliente.local@oficina.com");
+        var base = pagamento(MetodoPagamento.PIX);
+        var integrated = new Pagamento(
+                base.pagamentoId(),
+                base.ordemServicoId(),
+                base.orcamentoId(),
+                base.valor(),
+                base.metodo(),
+                base.status(),
+                "mercado-pago",
+                "123456",
+                base.criadoEm(),
+                base.atualizadoEm());
+
+        var result = gateway.consultar(integrated).join();
+
+        assertEquals(StatusPagamento.CRIADO, result.status());
+        assertEquals("pix-copia-e-cola", result.instrucoesPix().copiaECola());
+        assertEquals(expiration, result.instrucoesPix().expiraEm());
+    }
+
     private Pagamento pagamento(MetodoPagamento metodo) {
         var now = OffsetDateTime.now();
         return new Pagamento(

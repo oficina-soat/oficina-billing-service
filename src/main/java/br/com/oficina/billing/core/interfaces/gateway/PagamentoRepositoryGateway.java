@@ -22,12 +22,19 @@ public interface PagamentoRepositoryGateway {
 
     CompletableFuture<Optional<Pagamento>> findById(UUID pagamentoId);
 
+    CompletableFuture<Optional<Pagamento>> findByTransacaoExternaId(String transacaoExternaId);
+
     CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId);
 
     CompletableFuture<Optional<Pagamento>> findByOrcamentoId(UUID orcamentoId);
 
     CompletableFuture<List<Pagamento>> findAll();
 
+    CompletableFuture<UpdateResult> updateIfStatus(Pagamento pagamento, br.com.oficina.billing.core.entities.StatusPagamento expectedStatus);
+
     record CreateResult(Pagamento pagamento, boolean created) {
+    }
+
+    record UpdateResult(Pagamento pagamento, boolean updated) {
     }
 }

@@ -17,7 +17,14 @@ public record PagamentoViewModel(
         StatusPagamento status,
         String provedor,
         String transacaoExternaId,
+        InstrucoesPixViewModel instrucoesPix,
         OffsetDateTime criadoEm,
         OffsetDateTime atualizadoEm,
         List<AcaoPermitidaPagamento> acoesPermitidas) {
+    public record InstrucoesPixViewModel(
+            String copiaECola,
+            String qrCodeBase64,
+            String ticketUrl,
+            OffsetDateTime expiraEm) {
+    }
 }

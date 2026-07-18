@@ -18,6 +18,24 @@ final class PagamentoStatusUpdater {
             StatusPagamento status,
             String provedor,
             String transacaoExternaId) {
+        return atualizarStatus(
+                repository,
+                clock,
+                pagamento,
+                status,
+                provedor,
+                transacaoExternaId,
+                pagamento.instrucoesPix());
+    }
+
+    static CompletableFuture<Pagamento> atualizarStatus(
+            PagamentoRepositoryGateway repository,
+            Clock clock,
+            Pagamento pagamento,
+            StatusPagamento status,
+            String provedor,
+            String transacaoExternaId,
+            br.com.oficina.billing.core.entities.InstrucoesPix instrucoesPix) {
         var atualizado = new Pagamento(
                 pagamento.pagamentoId(),
                 pagamento.ordemServicoId(),
@@ -27,6 +45,7 @@ final class PagamentoStatusUpdater {
                 status,
                 provedor,
                 transacaoExternaId,
+                instrucoesPix,
                 pagamento.criadoEm(),
                 OffsetDateTime.now(clock));
         return repository.save(atualizado);
