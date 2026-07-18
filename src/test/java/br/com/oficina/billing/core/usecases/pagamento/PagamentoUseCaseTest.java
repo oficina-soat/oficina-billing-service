@@ -19,9 +19,14 @@ import br.com.oficina.billing.framework.db.InMemoryPagamentoDataSourceAdapter;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
 import br.com.oficina.billing.framework.messaging.InMemoryBillingEventStore;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
@@ -70,6 +75,82 @@ class PagamentoUseCaseTest {
         var erro = assertFutureThrows(BusinessException.class, () -> service.executar(command));
 
         assertEquals("DUPLICATE_RESOURCE", erro.code());
+    }
+
+    @Test
+    void devePreservarFalhaDoProvedorELiberarClaimParaRetentativa() {
+        var pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var failure = new IllegalStateException("provedor indisponivel");
+        var gatewayCalls = new AtomicInteger();
+        var service = new RegistrarPagamentoUseCase(
+                pagamentoRepository,
+                orcamentoRepository,
+                eventStore,
+                pagamento -> gatewayCalls.incrementAndGet() == 1
+                        ? CompletableFuture.failedFuture(failure)
+                        : CompletableFuture.completedFuture(PagamentoGatewayResult.naoIntegrado()),
+                Clock.systemUTC(),
+                Duration.ofSeconds(1),
+                Duration.ofMillis(1),
+                2);
+        var orcamento = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+
+        var propagated = assertFutureThrows(IllegalStateException.class, () -> service.executar(
+                new RegistrarPagamentoUseCase.Command(
+                        orcamento.ordemServicoId(),
+                        orcamento.orcamentoId(),
+                        BigDecimal.ZERO,
+                        MetodoPagamento.PIX)));
+
+        assertEquals(failure, propagated);
+        assertTrue(pagamentoRepository.findByOrcamentoId(orcamento.orcamentoId()).join().isEmpty());
+
+        var retried = service.executar(new RegistrarPagamentoUseCase.Command(
+                orcamento.ordemServicoId(),
+                orcamento.orcamentoId(),
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX)).join();
+
+        assertEquals(2, gatewayCalls.get());
+        assertEquals(retried.pagamentoId(), pagamentoRepository.findByOrcamentoId(
+                orcamento.orcamentoId()).join().orElseThrow().pagamentoId());
+    }
+
+    @Test
+    void deveFalharSemAcionarProvedorQuandoClaimPermaneceOcupado() {
+        var pagamentoRepository = new InMemoryPagamentoDataSourceAdapter();
+        var gatewayCalls = new AtomicInteger();
+        var claimedAt = OffsetDateTime.parse("2026-01-01T12:00:00Z");
+        var clock = Clock.fixed(claimedAt.toInstant(), ZoneOffset.UTC);
+        var service = new RegistrarPagamentoUseCase(
+                pagamentoRepository,
+                orcamentoRepository,
+                eventStore,
+                pagamento -> {
+                    gatewayCalls.incrementAndGet();
+                    return CompletableFuture.completedFuture(PagamentoGatewayResult.naoIntegrado());
+                },
+                clock,
+                Duration.ofMinutes(1),
+                Duration.ofMillis(1),
+                1);
+        var orcamento = aprovar(gerar(UUID.randomUUID()).orcamentoId(), null);
+        assertTrue(pagamentoRepository.claimProviderRequest(
+                orcamento.orcamentoId(),
+                UUID.randomUUID(),
+                claimedAt,
+                claimedAt.plusMinutes(1)).join());
+
+        var erro = assertFutureThrows(BusinessException.class, () -> service.executar(
+                new RegistrarPagamentoUseCase.Command(
+                        orcamento.ordemServicoId(),
+                        orcamento.orcamentoId(),
+                        BigDecimal.ZERO,
+                        MetodoPagamento.PIX)));
+
+        assertEquals("DEPENDENCY_UNAVAILABLE", erro.code());
+        assertEquals(0, gatewayCalls.get());
+        assertTrue(pagamentoRepository.findByOrcamentoId(orcamento.orcamentoId()).join().isEmpty());
     }
 
     @Test

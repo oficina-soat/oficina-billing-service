@@ -235,6 +235,8 @@ Ao consumir `ordemDeServicoCriada`, o serviço também projeta localmente o e-ma
 
 A integração com Mercado Pago é opcional e fica desabilitada por padrão. Quando `OFICINA_MERCADO_PAGO_ENABLED=true`, o Access Token passa a ser obrigatório já na inicialização e o registro de pagamento PIX em `POST /api/v1/pagamentos` cria uma cobrança no endpoint `/v1/payments` do Mercado Pago usando `Authorization: Bearer` e `X-Idempotency-Key` com o `pagamentoId`.
 
+Antes da chamada externa, o Billing reivindica no PostgreSQL um claim com lease por `orcamentoId`. Somente o proprietário chama o provedor; consumidores concorrentes aguardam o pagamento persistido e reutilizam a mesma Outbox idempotente. Falha do proprietário libera o claim para takeover por outro consumidor, mas continua retentável quando não existe concorrente que conclua o pagamento. Os timeouts padrão de conexão e leitura são, respectivamente, 3 e 10 segundos, inferiores ao lease de 30 segundos.
+
 Mapeamento de status do provedor:
 
 - `approved`: pagamento local `CONFIRMADO` e evento `pagamentoConfirmado`;
