@@ -39,9 +39,23 @@ public interface BillingEventStore extends FinanceiroSnapshotGateway, OutboxEven
 
     List<OutboxEventRecord> listarPendentesParaPublicacao(int limit);
 
+    default List<OutboxEventRecord> reivindicarPendentesParaPublicacao(
+            int limit, String claimOwner, OffsetDateTime claimUntil) {
+        return listarPendentesParaPublicacao(limit);
+    }
+
     OutboxEventRecord marcarPublicado(UUID eventId);
 
+    default OutboxEventRecord marcarPublicado(UUID eventId, String claimOwner) {
+        return marcarPublicado(eventId);
+    }
+
     OutboxEventRecord marcarFalhaPublicacao(UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed);
+
+    default OutboxEventRecord marcarFalhaPublicacao(
+            UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed, String claimOwner) {
+        return marcarFalhaPublicacao(eventId, lastError, nextAttemptAt, failed);
+    }
 
     default ItemOrcamento itemPeca(Map<String, Object> peca) {
         var pecaId = uuid(peca.get("pecaId"));

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import br.com.oficina.billing.core.entities.ItemOrcamento;
 import br.com.oficina.billing.core.entities.MetodoPagamento;
@@ -51,6 +52,41 @@ class PostgresBillingRepositoryTest {
 
     @Inject
     DataSource dataSource;
+
+    @Test
+    void deveCoordenarClaimDaOutboxEntreReplicasERecuperarLeaseExpirado() {
+        var eventId = UUID.randomUUID();
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        eventStore.registrarOutboxIdempotente(
+                eventId,
+                UUID.randomUUID().toString(),
+                "pagamentoSolicitado",
+                "oficina.billing.pagamento-solicitado",
+                Map.of("pagamentoId", UUID.randomUUID().toString()),
+                "postgres-claim-test",
+                now).join();
+
+        var firstClaim = eventStore.reivindicarPendentesParaPublicacao(100, "replica-a", now.plusMinutes(1));
+        var concurrentClaim = eventStore.reivindicarPendentesParaPublicacao(100, "replica-b", now.plusMinutes(1));
+
+        assertTrue(firstClaim.stream().anyMatch(candidate -> candidate.eventId().equals(eventId)));
+        assertTrue(concurrentClaim.stream().noneMatch(candidate -> candidate.eventId().equals(eventId)));
+        assertThrows(IllegalStateException.class, () -> eventStore.marcarPublicado(eventId, "replica-b"));
+
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(
+                        "UPDATE outbox_event SET claim_until = ? WHERE id = ?")) {
+            statement.setObject(1, now.minusSeconds(1));
+            statement.setObject(2, eventId);
+            statement.executeUpdate();
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException(exception);
+        }
+
+        var recovered = eventStore.reivindicarPendentesParaPublicacao(100, "replica-b", now.plusMinutes(1));
+        assertTrue(recovered.stream().anyMatch(candidate -> candidate.eventId().equals(eventId)));
+        assertEquals("PUBLISHED", eventStore.marcarPublicado(eventId, "replica-b").status());
+    }
 
     @Test
     void devePersistirOrcamentoItensEPagamentoNoPostgreSQL() {
@@ -222,6 +258,21 @@ class PostgresBillingRepositoryTest {
         assertTrue(restartedStore.listarOutbox().stream()
                 .filter(event -> event.eventId().equals(pendente.eventId()))
                 .allMatch(event -> event.status().equals("PUBLISHED") && event.publishedAt() != null));
+
+        var idempotentOutboxId = UUID.randomUUID();
+        for (var attempt = 0; attempt < 2; attempt++) {
+            eventStore.registrarOutboxIdempotente(
+                    idempotentOutboxId,
+                    ordemServicoId.toString(),
+                    "orcamentoGerado",
+                    "oficina.billing.orcamento-gerado",
+                    Map.of("ordemServicoId", ordemServicoId.toString()),
+                    "postgres-idempotent-outbox-test",
+                    OffsetDateTime.now(ZoneOffset.UTC)).join();
+        }
+        assertEquals(1, restartedStore.listarOutbox().stream()
+                .filter(event -> event.eventId().equals(idempotentOutboxId))
+                .count());
 
         eventStore.registrarOutbox(
                 ordemServicoId.toString(),

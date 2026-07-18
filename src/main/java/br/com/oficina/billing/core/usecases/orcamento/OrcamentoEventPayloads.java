@@ -6,6 +6,7 @@ import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 final class OrcamentoEventPayloads {
@@ -38,6 +39,32 @@ final class OrcamentoEventPayloads {
                 topic,
                 payload,
                 null,
+                ocorridoEm);
+    }
+
+    static CompletableFuture<Void> registrarEventoIdempotente(
+            OutboxEventSender outboxEventSender,
+            UUID eventId,
+            Orcamento orcamento,
+            String eventType,
+            String topic,
+            String timestampField,
+            OffsetDateTime ocorridoEm,
+            String correlationId) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("orcamentoId", orcamento.orcamentoId().toString());
+        payload.put("ordemServicoId", orcamento.ordemServicoId().toString());
+        payload.put("itens", orcamento.itens().stream().map(OrcamentoEventPayloads::itemPayload).toList());
+        payload.put("valorTotal", orcamento.valorTotal());
+        payload.put("status", orcamento.status().name());
+        payload.put(timestampField, ocorridoEm.toString());
+        return outboxEventSender.registrarOutboxIdempotente(
+                eventId,
+                orcamento.ordemServicoId().toString(),
+                eventType,
+                topic,
+                payload,
+                correlationId,
                 ocorridoEm);
     }
 
