@@ -14,6 +14,7 @@ import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -93,6 +94,25 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
             FROM pagamento
             ORDER BY atualizado_em
             """;
+    private static final String CLAIM_PROVIDER_REQUEST = """
+            INSERT INTO pagamento_provider_claim (
+                orcamento_id,
+                owner_id,
+                claim_until,
+                updated_at
+            ) VALUES (?, ?, ?, ?)
+            ON CONFLICT (orcamento_id) DO UPDATE SET
+                owner_id = EXCLUDED.owner_id,
+                claim_until = EXCLUDED.claim_until,
+                updated_at = EXCLUDED.updated_at
+            WHERE pagamento_provider_claim.claim_until <= EXCLUDED.updated_at
+            RETURNING owner_id
+            """;
+    private static final String RELEASE_PROVIDER_REQUEST = """
+            DELETE FROM pagamento_provider_claim
+            WHERE orcamento_id = ?
+              AND owner_id = ?
+            """;
 
     private final DataSource dataSource;
     private final OperationalMetrics metrics;
@@ -156,6 +176,59 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
         statement.setString(8, pagamento.transacaoExternaId());
         statement.setObject(9, pagamento.criadoEm());
         statement.setObject(10, pagamento.atualizadoEm());
+    }
+
+    @Override
+    public CompletableFuture<Boolean> claimProviderRequest(
+            UUID orcamentoId,
+            UUID ownerId,
+            OffsetDateTime claimedAt,
+            OffsetDateTime claimUntil) {
+        return CompletableFuture.completedFuture(metrics.persistence(
+                DATABASE,
+                RESOURCE,
+                "claim_provider_request",
+                () -> claimProviderRequestBlocking(orcamentoId, ownerId, claimedAt, claimUntil)));
+    }
+
+    private boolean claimProviderRequestBlocking(
+            UUID orcamentoId,
+            UUID ownerId,
+            OffsetDateTime claimedAt,
+            OffsetDateTime claimUntil) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(CLAIM_PROVIDER_REQUEST)) {
+            statement.setObject(1, orcamentoId);
+            statement.setObject(2, ownerId);
+            statement.setObject(3, claimUntil);
+            statement.setObject(4, claimedAt);
+            try (var resultSet = statement.executeQuery()) {
+                return resultSet.next() && ownerId.equals(uuid(resultSet, "owner_id"));
+            }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
+    @Override
+    public CompletableFuture<Void> releaseProviderRequest(UUID orcamentoId, UUID ownerId) {
+        return CompletableFuture.completedFuture(metrics.persistence(
+                DATABASE,
+                RESOURCE,
+                "release_provider_request",
+                () -> releaseProviderRequestBlocking(orcamentoId, ownerId)));
+    }
+
+    private Void releaseProviderRequestBlocking(UUID orcamentoId, UUID ownerId) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(RELEASE_PROVIDER_REQUEST)) {
+            statement.setObject(1, orcamentoId);
+            statement.setObject(2, ownerId);
+            statement.executeUpdate();
+            return null;
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
     }
 
     @Override

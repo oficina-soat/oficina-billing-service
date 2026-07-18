@@ -242,9 +242,10 @@ class BillingEventConsumerTest {
         var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
         aprovarOrcamentoUseCase.executar(
                 new AprovarOrcamentoUseCase.Command(orcamento.orcamentoId(), "Aprovado pelo cliente")).join();
-        var barrier = new CyclicBarrier(2);
+        var startBarrier = new CyclicBarrier(2);
         var gatewayCalls = new AtomicInteger();
         var paymentIds = java.util.concurrent.ConcurrentHashMap.<UUID>newKeySet();
+        var providerResponse = new CompletableFuture<PagamentoGatewayResult>();
         var concurrentRegistrar = new RegistrarPagamentoUseCase(
                 pagamentoRepository,
                 orcamentoRepository,
@@ -252,8 +253,7 @@ class BillingEventConsumerTest {
                 pagamento -> {
                     gatewayCalls.incrementAndGet();
                     paymentIds.add(pagamento.pagamentoId());
-                    await(barrier);
-                    return CompletableFuture.completedFuture(PagamentoGatewayResult.naoIntegrado());
+                    return providerResponse;
                 });
         var concurrentConsumer = new BillingEventConsumer(
                 store,
@@ -272,17 +272,77 @@ class BillingEventConsumerTest {
                 Map.of("ordemServicoId", ordemServicoId.toString()));
 
         var consumos = CompletableFuture.allOf(
-                CompletableFuture.runAsync(() -> assertTrue(concurrentConsumer.consumir(execucaoFinalizada))),
-                CompletableFuture.runAsync(() -> assertTrue(concurrentConsumer.consumir(ordemFinalizada))));
+                CompletableFuture.runAsync(() -> {
+                    await(startBarrier);
+                    assertTrue(concurrentConsumer.consumir(execucaoFinalizada));
+                }),
+                CompletableFuture.runAsync(() -> {
+                    await(startBarrier);
+                    assertTrue(concurrentConsumer.consumir(ordemFinalizada));
+                }));
+        CompletableFuture.delayedExecutor(100, TimeUnit.MILLISECONDS)
+                .execute(() -> providerResponse.complete(PagamentoGatewayResult.naoIntegrado()));
         consumos.orTimeout(10, TimeUnit.SECONDS).join();
 
-        assertEquals(2, gatewayCalls.get());
+        assertEquals(1, gatewayCalls.get());
         assertEquals(1, paymentIds.size());
         assertEquals(1, pagamentoRepository.findByOrdemServicoId(ordemServicoId).join().size());
         assertEquals(1, store.listarOutbox().stream()
                 .filter(event -> event.eventType().equals("pagamentoSolicitado")
                         && event.payload().get("ordemServicoId").equals(ordemServicoId.toString()))
                 .count());
+    }
+
+    @Test
+    void devePermitirTakeoverAposFalhaDoProprietarioSemRetentarOsEventos() {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
+        aprovarOrcamentoUseCase.executar(
+                new AprovarOrcamentoUseCase.Command(orcamento.orcamentoId(), "Aprovado pelo cliente")).join();
+        var startBarrier = new CyclicBarrier(2);
+        var gatewayCalls = new AtomicInteger();
+        var concurrentRegistrar = new RegistrarPagamentoUseCase(
+                pagamentoRepository,
+                orcamentoRepository,
+                store,
+                pagamento -> gatewayCalls.incrementAndGet() == 1
+                        ? CompletableFuture.failedFuture(new IllegalStateException("provedor indisponivel"))
+                        : CompletableFuture.completedFuture(PagamentoGatewayResult.naoIntegrado()));
+        var concurrentConsumer = new BillingEventConsumer(
+                store,
+                gerarOrcamentoUseCase,
+                new SolicitarPagamentoDaOrdemUseCase(orcamentoRepository, concurrentRegistrar),
+                new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
+        var execucaoFinalizada = envelope(
+                UUID.randomUUID(),
+                "execucaoFinalizada",
+                ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId.toString()));
+        var ordemFinalizada = envelope(
+                UUID.randomUUID(),
+                "ordemDeServicoFinalizada",
+                ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId.toString()));
+
+        var consumos = CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> {
+                    await(startBarrier);
+                    assertTrue(concurrentConsumer.consumir(execucaoFinalizada));
+                }),
+                CompletableFuture.runAsync(() -> {
+                    await(startBarrier);
+                    assertTrue(concurrentConsumer.consumir(ordemFinalizada));
+                }));
+        consumos.orTimeout(10, TimeUnit.SECONDS).join();
+
+        assertEquals(2, gatewayCalls.get());
+        assertEquals(1, pagamentoRepository.findByOrdemServicoId(ordemServicoId).join().size());
+        assertEquals(1, store.listarOutbox().stream()
+                .filter(event -> event.eventType().equals("pagamentoSolicitado")
+                        && event.payload().get("ordemServicoId").equals(ordemServicoId.toString()))
+                .count());
+        assertTrue(store.eventoConsumido(execucaoFinalizada.eventId()));
+        assertTrue(store.eventoConsumido(ordemFinalizada.eventId()));
     }
 
     @Test

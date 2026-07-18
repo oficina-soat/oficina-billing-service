@@ -231,6 +231,46 @@ class PostgresBillingRepositoryTest {
     }
 
     @Test
+    void deveCoordenarSolicitacaoAoProvedorEntreReplicasERecuperarLease() {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.randomUUID();
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        orcamentoRepository.save(new Orcamento(
+                orcamentoId,
+                ordemServicoId,
+                List.of(),
+                BigDecimal.ZERO,
+                StatusOrcamento.APROVADO,
+                now,
+                now)).join();
+        var replicaA = new PostgresPagamentoDataSourceAdapter(dataSource);
+        var replicaB = new PostgresPagamentoDataSourceAdapter(dataSource);
+        var ownerA = UUID.randomUUID();
+        var ownerB = UUID.randomUUID();
+
+        assertTrue(replicaA.claimProviderRequest(
+                orcamentoId, ownerA, now, now.plusMinutes(1)).join());
+        assertFalse(replicaB.claimProviderRequest(
+                orcamentoId, ownerB, now, now.plusMinutes(1)).join());
+
+        replicaB.releaseProviderRequest(orcamentoId, ownerB).join();
+        assertFalse(replicaB.claimProviderRequest(
+                orcamentoId, ownerB, now.plusSeconds(1), now.plusMinutes(1)).join());
+
+        var afterLease = now.plusMinutes(2);
+        assertTrue(replicaB.claimProviderRequest(
+                orcamentoId, ownerB, afterLease, afterLease.plusMinutes(1)).join());
+
+        replicaA.releaseProviderRequest(orcamentoId, ownerA).join();
+        assertFalse(replicaA.claimProviderRequest(
+                orcamentoId, ownerA, afterLease.plusSeconds(1), afterLease.plusMinutes(1)).join());
+
+        replicaB.releaseProviderRequest(orcamentoId, ownerB).join();
+        assertTrue(replicaA.claimProviderRequest(
+                orcamentoId, ownerA, afterLease.plusSeconds(1), afterLease.plusMinutes(1)).join());
+    }
+
+    @Test
     void devePersistirProjecoesEventosConsumidosEOutboxNoPostgreSQL() {
         assertInstanceOf(PostgresBillingEventStore.class, eventStore);
 

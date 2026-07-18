@@ -4,6 +4,7 @@ import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -15,6 +16,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @IfBuildProperty(name = "oficina.persistence.kind", stringValue = "memory")
 public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGateway {
     private final ConcurrentHashMap<UUID, Pagamento> storage = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<UUID, ProviderClaim> providerClaims = new ConcurrentHashMap<>();
 
     @Override
     public CompletableFuture<Pagamento> save(Pagamento pagamento) {
@@ -32,6 +34,28 @@ public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGa
         }
         storage.put(pagamento.pagamentoId(), pagamento);
         return CompletableFuture.completedFuture(new CreateResult(pagamento, true));
+    }
+
+    @Override
+    public synchronized CompletableFuture<Boolean> claimProviderRequest(
+            UUID orcamentoId,
+            UUID ownerId,
+            OffsetDateTime claimedAt,
+            OffsetDateTime claimUntil) {
+        var current = providerClaims.get(orcamentoId);
+        if (current != null && current.claimUntil().isAfter(claimedAt)) {
+            return CompletableFuture.completedFuture(false);
+        }
+        providerClaims.put(orcamentoId, new ProviderClaim(ownerId, claimUntil));
+        return CompletableFuture.completedFuture(true);
+    }
+
+    @Override
+    public synchronized CompletableFuture<Void> releaseProviderRequest(UUID orcamentoId, UUID ownerId) {
+        providerClaims.computeIfPresent(
+                orcamentoId,
+                (ignored, claim) -> claim.ownerId().equals(ownerId) ? null : claim);
+        return CompletableFuture.completedFuture(null);
     }
 
     @Override
@@ -61,5 +85,8 @@ public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGa
         return CompletableFuture.completedFuture(storage.values().stream()
                 .sorted(Comparator.comparing(Pagamento::atualizadoEm))
                 .toList());
+    }
+
+    private record ProviderClaim(UUID ownerId, OffsetDateTime claimUntil) {
     }
 }
