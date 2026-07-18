@@ -68,9 +68,22 @@ class SqsDomainEventConsumer {
         }
         var consumed = 0;
         for (var topic : DomainMessagingRoutes.consumedTopics()) {
-            var queue = DomainMessagingRoutes.queueName(topic);
-            var messages = messagingClient.receive(topic, maxMessages, waitTimeSeconds);
-            for (var message : messages.messages()) {
+            consumed += consumirDisponiveis(topic);
+        }
+        return consumed;
+    }
+
+    int consumirDisponiveis(String topic) {
+        if (!consumerEnabled) {
+            return 0;
+        }
+        if (!DomainMessagingRoutes.consumedTopics().contains(topic)) {
+            throw new IllegalArgumentException("Topico nao consumido pelo Billing: " + topic);
+        }
+        var consumed = 0;
+        var queue = DomainMessagingRoutes.queueName(topic);
+        var messages = messagingClient.receive(topic, maxMessages, waitTimeSeconds);
+        for (var message : messages.messages()) {
                 var startedAt = metrics.startSqsProcessing(queue, topic);
                 var eventType = "unknown";
                 try {
@@ -78,7 +91,7 @@ class SqsDomainEventConsumer {
                     eventType = event.eventType();
                     consumer.consumir(event);
                     messagingClient.delete(messages.queueUrl(), message);
-                    metrics.sqsConsumed(queue, topic, eventType, startedAt);
+                    metrics.sqsConsumed(queue, topic, eventType, startedAt, event.occurredAt());
                     consumed++;
                     StructuredLog.info(LOG, "sqs domain event acknowledged", Map.of(
                             "eventId", event.eventId().toString(),
@@ -99,7 +112,6 @@ class SqsDomainEventConsumer {
                             startedAt);
                     LOG.warnf(exception, "Falha ao processar mensagem SQS da fila %s", DomainMessagingRoutes.queueName(topic));
                 }
-            }
         }
         return consumed;
     }

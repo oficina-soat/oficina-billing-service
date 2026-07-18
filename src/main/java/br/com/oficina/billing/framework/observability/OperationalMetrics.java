@@ -71,10 +71,18 @@ public class OperationalMetrics {
     }
 
     public void outboxPublished(String eventType, String topic, long startedAt) {
+        outboxPublished(eventType, topic, startedAt, null);
+    }
+
+    public void outboxPublished(String eventType, String topic, long startedAt, OffsetDateTime createdAt) {
         registry.counter("outbox.published.count", outboxTags(eventType, topic)).increment();
         registry.counter("messaging.events.published.count", messagingTags(eventType, topic)).increment();
         registry.timer("outbox.publish.latency", outboxTags(eventType, topic))
                 .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
+        if (createdAt != null) {
+            registry.timer("outbox.pending.duration", outboxTags(eventType, topic))
+                    .record(nonNegativeDuration(createdAt));
+        }
     }
 
     public void outboxFailed(String eventType, String topic, String reason) {
@@ -92,10 +100,18 @@ public class OperationalMetrics {
     }
 
     public void sqsConsumed(String queue, String topic, String eventType, long startedAt) {
+        sqsConsumed(queue, topic, eventType, startedAt, null);
+    }
+
+    public void sqsConsumed(
+            String queue, String topic, String eventType, long startedAt, OffsetDateTime occurredAt) {
         var tags = messagingTags(eventType, topic).and(TAG_QUEUE, queue);
         registry.counter("messaging.events.consumed.count", tags).increment();
         registry.timer("messaging.events.processing.duration", tags)
                 .record(System.nanoTime() - startedAt, TimeUnit.NANOSECONDS);
+        if (occurredAt != null) {
+            registry.timer("messaging.events.delivery.latency", tags).record(nonNegativeDuration(occurredAt));
+        }
     }
 
     public void sqsFailed(String queue, String topic, String eventType, String reason, boolean sentToDlq, long startedAt) {
@@ -166,5 +182,10 @@ public class OperationalMetrics {
             return "unavailable";
         }
         return "other";
+    }
+
+    private static Duration nonNegativeDuration(OffsetDateTime since) {
+        var duration = Duration.between(since, OffsetDateTime.now(ZoneOffset.UTC));
+        return duration.isNegative() ? Duration.ZERO : duration;
     }
 }

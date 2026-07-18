@@ -149,6 +149,26 @@ public class PostgresBillingEventStore implements BillingEventStore {
             LIMIT ?
             """;
 
+    private static final String CLAIM_PENDING_OUTBOX = """
+            WITH candidates AS (
+                SELECT id FROM outbox_event
+                WHERE status = 'PENDING'
+                  AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+                  AND (claim_until IS NULL OR claim_until <= ?)
+                ORDER BY created_at
+                FOR UPDATE SKIP LOCKED
+                LIMIT ?
+            )
+            UPDATE outbox_event AS outbox
+            SET claim_owner = ?, claim_until = ?
+            FROM candidates
+            WHERE outbox.id = candidates.id
+            RETURNING outbox.id, outbox.aggregate_id, outbox.event_type, outbox.event_version,
+                      outbox.topic, outbox.producer, outbox.payload::text AS payload, outbox.status,
+                      outbox.correlation_id, outbox.occurred_at, outbox.created_at,
+                      outbox.published_at, outbox.attempts, outbox.last_error
+            """;
+
     private static final String SELECT_OUTBOX_BY_ID_FOR_UPDATE = """
             SELECT id, aggregate_id, event_type, event_version, topic, producer, payload::text AS payload,
                    status, correlation_id, occurred_at, created_at, published_at, attempts, last_error
@@ -163,8 +183,10 @@ public class PostgresBillingEventStore implements BillingEventStore {
                 published_at = ?,
                 attempts = ?,
                 last_error = NULL,
-                next_attempt_at = NULL
-            WHERE id = ?
+                next_attempt_at = NULL,
+                claim_owner = NULL,
+                claim_until = NULL
+            WHERE id = ? AND (? IS NULL OR claim_owner = ?)
             """;
 
     private static final String MARK_OUTBOX_FAILURE = """
@@ -173,8 +195,10 @@ public class PostgresBillingEventStore implements BillingEventStore {
                 attempts = ?,
                 next_attempt_at = ?,
                 last_error = ?,
-                published_at = NULL
-            WHERE id = ?
+                published_at = NULL,
+                claim_owner = NULL,
+                claim_until = NULL
+            WHERE id = ? AND (? IS NULL OR claim_owner = ?)
             """;
 
     private final DataSource dataSource;
@@ -593,12 +617,39 @@ public class PostgresBillingEventStore implements BillingEventStore {
     }
 
     @Override
-    public OutboxEventRecord marcarPublicado(UUID eventId) {
-        return metrics.persistence(
-                DATABASE, OUTBOX, "mark_published", () -> marcarPublicadoBlocking(eventId));
+    public List<OutboxEventRecord> reivindicarPendentesParaPublicacao(
+            int limit, String claimOwner, OffsetDateTime claimUntil) {
+        return metrics.persistence(DATABASE, OUTBOX, "claim", () -> inTransaction(connection -> {
+            var now = OffsetDateTime.now(ZoneOffset.UTC);
+            try (var statement = connection.prepareStatement(CLAIM_PENDING_OUTBOX)) {
+                statement.setObject(1, now);
+                statement.setObject(2, now);
+                statement.setInt(3, Math.max(1, limit));
+                statement.setString(4, claimOwner);
+                statement.setObject(5, claimUntil);
+                try (var resultSet = statement.executeQuery()) {
+                    var records = new ArrayList<OutboxEventRecord>();
+                    while (resultSet.next()) {
+                        records.add(toOutboxEvent(resultSet));
+                    }
+                    return List.copyOf(records);
+                }
+            }
+        }));
     }
 
-    private OutboxEventRecord marcarPublicadoBlocking(UUID eventId) {
+    @Override
+    public OutboxEventRecord marcarPublicado(UUID eventId) {
+        return marcarPublicado(eventId, null);
+    }
+
+    @Override
+    public OutboxEventRecord marcarPublicado(UUID eventId, String claimOwner) {
+        return metrics.persistence(
+                DATABASE, OUTBOX, "mark_published", () -> marcarPublicadoBlocking(eventId, claimOwner));
+    }
+
+    private OutboxEventRecord marcarPublicadoBlocking(UUID eventId, String claimOwner) {
         var publicado = inTransaction(connection -> {
             var event = selectOutboxByIdForUpdate(connection, eventId);
             var updated = new OutboxEventRecord(
@@ -616,7 +667,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
                     OffsetDateTime.now(ZoneOffset.UTC),
                     event.attempts() + 1,
                     null);
-            markPublished(connection, updated);
+            markPublished(connection, updated, claimOwner);
             return updated;
         });
         logEvent("outbox event published", publicado, STATUS_PUBLISHED);
@@ -625,15 +676,21 @@ public class PostgresBillingEventStore implements BillingEventStore {
 
     @Override
     public OutboxEventRecord marcarFalhaPublicacao(UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed) {
+        return marcarFalhaPublicacao(eventId, lastError, nextAttemptAt, failed, null);
+    }
+
+    @Override
+    public OutboxEventRecord marcarFalhaPublicacao(
+            UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed, String claimOwner) {
         return metrics.persistence(
                 DATABASE,
                 OUTBOX,
                 "mark_failure",
-                () -> marcarFalhaPublicacaoBlocking(eventId, lastError, nextAttemptAt, failed));
+                () -> marcarFalhaPublicacaoBlocking(eventId, lastError, nextAttemptAt, failed, claimOwner));
     }
 
     private OutboxEventRecord marcarFalhaPublicacaoBlocking(
-            UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed) {
+            UUID eventId, String lastError, OffsetDateTime nextAttemptAt, boolean failed, String claimOwner) {
         var status = failed ? STATUS_FAILED : STATUS_PENDING;
         var updated = inTransaction(connection -> {
             var event = selectOutboxByIdForUpdate(connection, eventId);
@@ -652,31 +709,39 @@ public class PostgresBillingEventStore implements BillingEventStore {
                     null,
                     event.attempts() + 1,
                     lastError);
-            markFailure(connection, failure, failed ? null : nextAttemptAt);
+            markFailure(connection, failure, failed ? null : nextAttemptAt, claimOwner);
             return failure;
         });
         logEvent("outbox event publication failed", updated, status);
         return updated;
     }
 
-    private void markPublished(Connection connection, OutboxEventRecord event) throws SQLException {
+    private void markPublished(Connection connection, OutboxEventRecord event, String claimOwner) throws SQLException {
         try (var statement = connection.prepareStatement(MARK_OUTBOX_PUBLISHED)) {
             statement.setString(1, event.status());
             statement.setObject(2, event.publishedAt());
             statement.setInt(3, event.attempts());
             statement.setObject(4, event.eventId());
-            statement.executeUpdate();
+            statement.setString(5, claimOwner);
+            statement.setString(6, claimOwner);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException("Claim da Outbox nao pertence a esta replica: " + event.eventId());
+            }
         }
     }
 
-    private void markFailure(Connection connection, OutboxEventRecord event, OffsetDateTime nextAttemptAt) throws SQLException {
+    private void markFailure(Connection connection, OutboxEventRecord event, OffsetDateTime nextAttemptAt, String claimOwner) throws SQLException {
         try (var statement = connection.prepareStatement(MARK_OUTBOX_FAILURE)) {
             statement.setString(1, event.status());
             statement.setInt(2, event.attempts());
             statement.setObject(3, nextAttemptAt);
             statement.setString(4, event.lastError());
             statement.setObject(5, event.eventId());
-            statement.executeUpdate();
+            statement.setString(6, claimOwner);
+            statement.setString(7, claimOwner);
+            if (statement.executeUpdate() != 1) {
+                throw new IllegalStateException("Claim da Outbox nao pertence a esta replica: " + event.eventId());
+            }
         }
     }
 
