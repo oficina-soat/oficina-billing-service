@@ -73,13 +73,17 @@ class DomainMessagingWorkerTest {
     void filaBloqueadaNaoDeveImpedirOutraFila() throws InterruptedException {
         var topics = DomainMessagingRoutes.consumedTopics();
         var consumer = new BlockingSqsDomainEventConsumer(topics.getFirst(), topics.get(1));
+        var publisher = new CountingOutboxPublisher(false);
         var worker = new DomainMessagingWorker(
-                new CountingOutboxPublisher(false), consumer, true, 50, 100);
+                publisher, consumer, true, 50, 100);
 
         worker.start();
-
-        assertTrue(consumer.otherQueuePolled.await(2, TimeUnit.SECONDS));
-        worker.stop();
+        try {
+            assertTrue(consumer.otherQueuePolled.await(2, TimeUnit.SECONDS));
+            assertTrue(publisher.publishCalled.await(2, TimeUnit.SECONDS));
+        } finally {
+            worker.stop();
+        }
     }
 
     private static void invokeTick(DomainMessagingWorker worker, String methodName) throws ReflectiveOperationException {
@@ -97,6 +101,7 @@ class DomainMessagingWorkerTest {
     private static final class CountingOutboxPublisher extends OutboxPublisher {
         private final boolean fail;
         private int publishCalls;
+        private final CountDownLatch publishCalled = new CountDownLatch(1);
 
         private CountingOutboxPublisher(boolean fail) {
             super(new InMemoryBillingEventStore());
@@ -106,6 +111,7 @@ class DomainMessagingWorkerTest {
         @Override
         public List<OutboxEventRecord> publicarPendentes() {
             publishCalls++;
+            publishCalled.countDown();
             if (fail) {
                 throw new IllegalStateException("publisher failed");
             }
