@@ -1,10 +1,12 @@
 package br.com.oficina.billing.framework.db;
 
 import static br.com.oficina.billing.framework.db.JdbcBillingRepositorySupport.offsetDateTime;
+import static br.com.oficina.billing.framework.db.JdbcBillingRepositorySupport.nullableOffsetDateTime;
 import static br.com.oficina.billing.framework.db.JdbcBillingRepositorySupport.persistenceFailure;
 import static br.com.oficina.billing.framework.db.JdbcBillingRepositorySupport.uuid;
 
 import br.com.oficina.billing.core.entities.MetodoPagamento;
+import br.com.oficina.billing.core.entities.InstrucoesPix;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
@@ -37,9 +39,13 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
                 status,
                 provedor,
                 transacao_externa_id,
+                pix_copia_e_cola,
+                pix_qr_code_base64,
+                pix_ticket_url,
+                pix_expira_em,
                 criado_em,
                 atualizado_em
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT (id) DO UPDATE SET
                 ordem_de_servico_id = EXCLUDED.ordem_de_servico_id,
                 orcamento_id = EXCLUDED.orcamento_id,
@@ -48,6 +54,10 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
                 status = EXCLUDED.status,
                 provedor = EXCLUDED.provedor,
                 transacao_externa_id = EXCLUDED.transacao_externa_id,
+                pix_copia_e_cola = EXCLUDED.pix_copia_e_cola,
+                pix_qr_code_base64 = EXCLUDED.pix_qr_code_base64,
+                pix_ticket_url = EXCLUDED.pix_ticket_url,
+                pix_expira_em = EXCLUDED.pix_expira_em,
                 criado_em = EXCLUDED.criado_em,
                 atualizado_em = EXCLUDED.atualizado_em
             """;
@@ -61,22 +71,35 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
                 status,
                 provedor,
                 transacao_externa_id,
+                pix_copia_e_cola,
+                pix_qr_code_base64,
+                pix_ticket_url,
+                pix_expira_em,
                 criado_em,
                 atualizado_em
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING
             """;
 
     private static final String SELECT_PAGAMENTO_BY_ID = """
             SELECT id, ordem_de_servico_id, orcamento_id, valor, metodo, status, provedor,
-                   transacao_externa_id, criado_em, atualizado_em
+                   transacao_externa_id, pix_copia_e_cola, pix_qr_code_base64, pix_ticket_url,
+                   pix_expira_em, criado_em, atualizado_em
             FROM pagamento
             WHERE id = ?
+            """;
+    private static final String SELECT_PAGAMENTO_BY_TRANSACAO = """
+            SELECT id, ordem_de_servico_id, orcamento_id, valor, metodo, status, provedor,
+                   transacao_externa_id, pix_copia_e_cola, pix_qr_code_base64, pix_ticket_url,
+                   pix_expira_em, criado_em, atualizado_em
+            FROM pagamento
+            WHERE transacao_externa_id = ?
             """;
 
     private static final String SELECT_PAGAMENTOS_BY_ORDEM = """
             SELECT id, ordem_de_servico_id, orcamento_id, valor, metodo, status, provedor,
-                   transacao_externa_id, criado_em, atualizado_em
+                   transacao_externa_id, pix_copia_e_cola, pix_qr_code_base64, pix_ticket_url,
+                   pix_expira_em, criado_em, atualizado_em
             FROM pagamento
             WHERE ordem_de_servico_id = ?
             ORDER BY criado_em
@@ -84,15 +107,29 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
 
     private static final String SELECT_PAGAMENTO_BY_ORCAMENTO = """
             SELECT id, ordem_de_servico_id, orcamento_id, valor, metodo, status, provedor,
-                   transacao_externa_id, criado_em, atualizado_em
+                   transacao_externa_id, pix_copia_e_cola, pix_qr_code_base64, pix_ticket_url,
+                   pix_expira_em, criado_em, atualizado_em
             FROM pagamento
             WHERE orcamento_id = ?
             """;
     private static final String SELECT_PAGAMENTOS = """
             SELECT id, ordem_de_servico_id, orcamento_id, valor, metodo, status, provedor,
-                   transacao_externa_id, criado_em, atualizado_em
+                   transacao_externa_id, pix_copia_e_cola, pix_qr_code_base64, pix_ticket_url,
+                   pix_expira_em, criado_em, atualizado_em
             FROM pagamento
             ORDER BY atualizado_em
+            """;
+    private static final String UPDATE_PAGAMENTO_IF_STATUS = """
+            UPDATE pagamento SET
+                status = ?,
+                provedor = ?,
+                transacao_externa_id = ?,
+                pix_copia_e_cola = ?,
+                pix_qr_code_base64 = ?,
+                pix_ticket_url = ?,
+                pix_expira_em = ?,
+                atualizado_em = ?
+            WHERE id = ? AND status = ?
             """;
     private static final String CLAIM_PROVIDER_REQUEST = """
             INSERT INTO pagamento_provider_claim (
@@ -174,8 +211,19 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
         statement.setString(6, pagamento.status().name());
         statement.setString(7, pagamento.provedor());
         statement.setString(8, pagamento.transacaoExternaId());
-        statement.setObject(9, pagamento.criadoEm());
-        statement.setObject(10, pagamento.atualizadoEm());
+        bindInstrucoesPix(statement, pagamento.instrucoesPix(), 9);
+        statement.setObject(13, pagamento.criadoEm());
+        statement.setObject(14, pagamento.atualizadoEm());
+    }
+
+    private void bindInstrucoesPix(
+            java.sql.PreparedStatement statement,
+            InstrucoesPix instrucoes,
+            int start) throws SQLException {
+        statement.setString(start, instrucoes == null ? null : instrucoes.copiaECola());
+        statement.setString(start + 1, instrucoes == null ? null : instrucoes.qrCodeBase64());
+        statement.setString(start + 2, instrucoes == null ? null : instrucoes.ticketUrl());
+        statement.setObject(start + 3, instrucoes == null ? null : instrucoes.expiraEm());
     }
 
     @Override
@@ -238,6 +286,15 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     }
 
     @Override
+    public CompletableFuture<Optional<Pagamento>> findByTransacaoExternaId(String transacaoExternaId) {
+        return CompletableFuture.completedFuture(metrics.persistence(
+                DATABASE,
+                RESOURCE,
+                "find_by_external_transaction",
+                () -> findOneByString(SELECT_PAGAMENTO_BY_TRANSACAO, transacaoExternaId)));
+    }
+
+    @Override
     public CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId) {
         return CompletableFuture.completedFuture(metrics.persistence(
                 DATABASE, RESOURCE, "find_by_ordem", () -> findByOrdemServicoIdBlocking(ordemServicoId)));
@@ -280,10 +337,52 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
         }
     }
 
+    private Optional<Pagamento> findOneByString(String sql, String value) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, value);
+            try (var resultSet = statement.executeQuery()) {
+                return resultSet.next() ? Optional.of(toPagamento(resultSet)) : Optional.empty();
+            }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+    }
+
     @Override
     public CompletableFuture<List<Pagamento>> findAll() {
         return CompletableFuture.completedFuture(metrics.persistence(
                 DATABASE, RESOURCE, "find_all", this::findAllBlocking));
+    }
+
+    @Override
+    public CompletableFuture<UpdateResult> updateIfStatus(Pagamento pagamento, StatusPagamento expectedStatus) {
+        return CompletableFuture.completedFuture(metrics.persistence(
+                DATABASE,
+                RESOURCE,
+                "update_if_status",
+                () -> updateIfStatusBlocking(pagamento, expectedStatus)));
+    }
+
+    private UpdateResult updateIfStatusBlocking(Pagamento pagamento, StatusPagamento expectedStatus) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(UPDATE_PAGAMENTO_IF_STATUS)) {
+            statement.setString(1, pagamento.status().name());
+            statement.setString(2, pagamento.provedor());
+            statement.setString(3, pagamento.transacaoExternaId());
+            bindInstrucoesPix(statement, pagamento.instrucoesPix(), 4);
+            statement.setObject(8, pagamento.atualizadoEm());
+            statement.setObject(9, pagamento.pagamentoId());
+            statement.setString(10, expectedStatus.name());
+            if (statement.executeUpdate() > 0) {
+                return new UpdateResult(pagamento, true);
+            }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+        var atual = findOne(SELECT_PAGAMENTO_BY_ID, pagamento.pagamentoId())
+                .orElseThrow(() -> new IllegalStateException("Pagamento nao encontrado apos atualizacao concorrente."));
+        return new UpdateResult(atual, false);
     }
 
     private List<Pagamento> findAllBlocking() {
@@ -310,7 +409,20 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
                 StatusPagamento.valueOf(resultSet.getString("status")),
                 resultSet.getString("provedor"),
                 resultSet.getString("transacao_externa_id"),
+                instrucoesPix(resultSet),
                 offsetDateTime(resultSet, "criado_em"),
                 offsetDateTime(resultSet, "atualizado_em"));
+    }
+
+    private InstrucoesPix instrucoesPix(java.sql.ResultSet resultSet) throws SQLException {
+        var copiaECola = resultSet.getString("pix_copia_e_cola");
+        if (copiaECola == null || copiaECola.isBlank()) {
+            return null;
+        }
+        return new InstrucoesPix(
+                copiaECola,
+                resultSet.getString("pix_qr_code_base64"),
+                resultSet.getString("pix_ticket_url"),
+                nullableOffsetDateTime(resultSet, "pix_expira_em"));
     }
 }

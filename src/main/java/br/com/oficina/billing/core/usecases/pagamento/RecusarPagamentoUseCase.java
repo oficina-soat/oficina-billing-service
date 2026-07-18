@@ -35,6 +35,12 @@ public class RecusarPagamentoUseCase {
                                 "INVALID_STATE_TRANSITION",
                                 "Somente pagamentos criados podem ser recusados.");
                     }
+                    if ((pagamento.provedor() != null && !pagamento.provedor().isBlank())
+                            || "mercado-pago".equalsIgnoreCase(command.provedor())) {
+                        throw new BusinessException(
+                                "INVALID_STATE_TRANSITION",
+                                "Pagamentos integrados devem ser recusados por reconciliacao com o provedor.");
+                    }
                     return PagamentoStatusUpdater.atualizarStatus(
                             repository,
                             clock,

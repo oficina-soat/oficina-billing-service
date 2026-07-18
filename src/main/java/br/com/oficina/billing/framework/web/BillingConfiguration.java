@@ -19,6 +19,7 @@ import br.com.oficina.billing.core.usecases.pagamento.ConsultarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.ConsultarPagamentosDaOrdemServicoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.RecusarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.RegistrarPagamentoUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.ReconciliarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.SolicitarPagamentoDaOrdemUseCase;
 import br.com.oficina.billing.interfaces.controllers.OrcamentoController;
 import br.com.oficina.billing.interfaces.controllers.PagamentoController;
@@ -129,6 +130,15 @@ public class BillingConfiguration {
 
     @Produces
     @ApplicationScoped
+    ReconciliarPagamentoUseCase reconciliarPagamentoUseCase(
+            PagamentoRepositoryGateway repository,
+            PagamentoGateway pagamentoGateway,
+            OutboxEventSender outboxEventSender) {
+        return new ReconciliarPagamentoUseCase(repository, pagamentoGateway, outboxEventSender);
+    }
+
+    @Produces
+    @ApplicationScoped
     SolicitarPagamentoDaOrdemUseCase solicitarPagamentoDaOrdemUseCase(
             OrcamentoRepositoryGateway orcamentoRepository,
             RegistrarPagamentoUseCase registrarPagamentoUseCase) {
@@ -168,14 +178,16 @@ public class BillingConfiguration {
             ConsultarPagamentosDaOrdemServicoUseCase consultarPagamentosDaOrdemServicoUseCase,
             ConfirmarPagamentoUseCase confirmarPagamentoUseCase,
             RecusarPagamentoUseCase recusarPagamentoUseCase,
-            CancelarPagamentoUseCase cancelarPagamentoUseCase) {
+            CancelarPagamentoUseCase cancelarPagamentoUseCase,
+            ReconciliarPagamentoUseCase reconciliarPagamentoUseCase) {
         return new PagamentoController(
                 registrarPagamentoUseCase,
                 consultarPagamentoUseCase,
                 consultarPagamentosDaOrdemServicoUseCase,
                 confirmarPagamentoUseCase,
                 recusarPagamentoUseCase,
-                cancelarPagamentoUseCase);
+                cancelarPagamentoUseCase,
+                reconciliarPagamentoUseCase);
     }
 
     @Produces

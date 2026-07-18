@@ -14,14 +14,44 @@ public record Pagamento(
         StatusPagamento status,
         String provedor,
         String transacaoExternaId,
+        InstrucoesPix instrucoesPix,
         OffsetDateTime criadoEm,
         OffsetDateTime atualizadoEm) {
+    public Pagamento(
+            UUID pagamentoId,
+            UUID ordemServicoId,
+            UUID orcamentoId,
+            BigDecimal valor,
+            MetodoPagamento metodo,
+            StatusPagamento status,
+            String provedor,
+            String transacaoExternaId,
+            OffsetDateTime criadoEm,
+            OffsetDateTime atualizadoEm) {
+        this(
+                pagamentoId,
+                ordemServicoId,
+                orcamentoId,
+                valor,
+                metodo,
+                status,
+                provedor,
+                transacaoExternaId,
+                null,
+                criadoEm,
+                atualizadoEm);
+    }
+
     public List<AcaoPermitidaPagamento> acoesPermitidas() {
-        return status == StatusPagamento.CRIADO
-                ? List.of(
-                        AcaoPermitidaPagamento.CONFIRMAR,
-                        AcaoPermitidaPagamento.RECUSAR,
-                        AcaoPermitidaPagamento.CANCELAR)
-                : List.of();
+        if (status != StatusPagamento.CRIADO) {
+            return List.of();
+        }
+        if (provedor != null && !provedor.isBlank()) {
+            return List.of(AcaoPermitidaPagamento.ATUALIZAR_STATUS);
+        }
+        return List.of(
+                AcaoPermitidaPagamento.CONFIRMAR,
+                AcaoPermitidaPagamento.RECUSAR,
+                AcaoPermitidaPagamento.CANCELAR);
     }
 }

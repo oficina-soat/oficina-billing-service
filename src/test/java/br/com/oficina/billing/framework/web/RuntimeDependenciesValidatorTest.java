@@ -92,6 +92,7 @@ class RuntimeDependenciesValidatorTest {
         properties.put("oficina.messaging.aws-secret-access-key", "SECRET_PLACEHOLDER");
         properties.put("oficina.mercado-pago.enabled", "true");
         properties.put("oficina.mercado-pago.access-token", "");
+        properties.put("oficina.mercado-pago.webhook-secret", "");
         properties.put("oficina.mercado-pago.payer-email", "PAYER_PLACEHOLDER");
         properties.put("quarkus.rest-client.mercado-pago-api.url", "");
         var probes = new AtomicInteger();
@@ -122,6 +123,7 @@ class RuntimeDependenciesValidatorTest {
         assertTrue(exception.getMessage().contains("OFICINA_MESSAGING_ENDPOINT_OVERRIDE"));
         assertTrue(exception.getMessage().contains("credenciais AWS estaticas nao podem conter placeholder"));
         assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_ACCESS_TOKEN"));
+        assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_WEBHOOK_SECRET"));
         assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_PAYER_EMAIL"));
         assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_API_URL"));
     }

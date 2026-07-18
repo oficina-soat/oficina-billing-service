@@ -2,6 +2,7 @@ package br.com.oficina.billing.interfaces.presenters;
 
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.interfaces.presenters.view_model.PagamentoViewModel;
+import br.com.oficina.billing.interfaces.presenters.view_model.PagamentoViewModel.InstrucoesPixViewModel;
 import java.util.List;
 
 public class PagamentoPresenterAdapter {
@@ -36,6 +37,13 @@ public class PagamentoPresenterAdapter {
                 pagamento.status(),
                 pagamento.provedor(),
                 pagamento.transacaoExternaId(),
+                pagamento.instrucoesPix() == null
+                        ? null
+                        : new InstrucoesPixViewModel(
+                                pagamento.instrucoesPix().copiaECola(),
+                                pagamento.instrucoesPix().qrCodeBase64(),
+                                pagamento.instrucoesPix().ticketUrl(),
+                                pagamento.instrucoesPix().expiraEm()),
                 pagamento.criadoEm(),
                 pagamento.atualizadoEm(),
                 pagamento.acoesPermitidas());

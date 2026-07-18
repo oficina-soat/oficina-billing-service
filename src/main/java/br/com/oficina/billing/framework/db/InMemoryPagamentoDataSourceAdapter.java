@@ -64,6 +64,13 @@ public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     }
 
     @Override
+    public CompletableFuture<Optional<Pagamento>> findByTransacaoExternaId(String transacaoExternaId) {
+        return CompletableFuture.completedFuture(storage.values().stream()
+                .filter(pagamento -> transacaoExternaId.equals(pagamento.transacaoExternaId()))
+                .findFirst());
+    }
+
+    @Override
     public CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId) {
         var pagamentos = storage.values().stream()
                 .filter(pagamento -> pagamento.ordemServicoId().equals(ordemServicoId))
@@ -85,6 +92,18 @@ public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGa
         return CompletableFuture.completedFuture(storage.values().stream()
                 .sorted(Comparator.comparing(Pagamento::atualizadoEm))
                 .toList());
+    }
+
+    @Override
+    public synchronized CompletableFuture<UpdateResult> updateIfStatus(
+            Pagamento pagamento,
+            br.com.oficina.billing.core.entities.StatusPagamento expectedStatus) {
+        var atual = storage.get(pagamento.pagamentoId());
+        if (atual == null || atual.status() != expectedStatus) {
+            return CompletableFuture.completedFuture(new UpdateResult(atual, false));
+        }
+        storage.put(pagamento.pagamentoId(), pagamento);
+        return CompletableFuture.completedFuture(new UpdateResult(pagamento, true));
     }
 
     private record ProviderClaim(UUID ownerId, OffsetDateTime claimUntil) {

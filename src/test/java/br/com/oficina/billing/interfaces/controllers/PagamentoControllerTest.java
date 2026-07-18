@@ -15,6 +15,7 @@ import br.com.oficina.billing.core.usecases.pagamento.ConsultarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.ConsultarPagamentosDaOrdemServicoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.RecusarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.RegistrarPagamentoUseCase;
+import br.com.oficina.billing.core.usecases.pagamento.ReconciliarPagamentoUseCase;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -66,13 +67,15 @@ class PagamentoControllerTest {
         var confirmar = new RecordingConfirmarPagamentoUseCase();
         var recusar = new RecordingRecusarPagamentoUseCase();
         var cancelar = new RecordingCancelarPagamentoUseCase();
+        var reconciliar = new RecordingReconciliarPagamentoUseCase();
         var controller = new PagamentoController(
                 registrar,
                 consultar,
                 consultarDaOrdem,
                 confirmar,
                 recusar,
-                cancelar);
+                cancelar,
+                reconciliar);
         var ordemServicoId = UUID.randomUUID();
         var orcamentoId = UUID.randomUUID();
         var pagamentoId = UUID.randomUUID();
@@ -122,6 +125,12 @@ class PagamentoControllerTest {
 
         controller.cancelarPagamento(pagamentoId, new PagamentoController.CancelamentoRequest("Cliente desistiu")).join();
         assertEquals("Cliente desistiu", cancelar.command.motivo());
+
+        assertSame(reconciliar.pagamento, controller.reconciliarPagamento(pagamentoId).join());
+        assertEquals(pagamentoId, reconciliar.command.pagamentoId());
+
+        assertSame(reconciliar.pagamento, controller.reconciliarPagamentoPorTransacao("mp-001").join());
+        assertEquals("mp-001", reconciliar.transacaoExternaId);
     }
 
     private static PagamentoController controller(RecordingRegistrarPagamentoUseCase registrar) {
@@ -236,6 +245,28 @@ class PagamentoControllerTest {
         @Override
         public CompletableFuture<Pagamento> executar(Command command) {
             this.command = command;
+            return CompletableFuture.completedFuture(pagamento);
+        }
+    }
+
+    private static final class RecordingReconciliarPagamentoUseCase extends ReconciliarPagamentoUseCase {
+        private final Pagamento pagamento = pagamento();
+        private Command command;
+        private String transacaoExternaId;
+
+        private RecordingReconciliarPagamentoUseCase() {
+            super(null, null, null);
+        }
+
+        @Override
+        public CompletableFuture<Pagamento> executar(Command command) {
+            this.command = command;
+            return CompletableFuture.completedFuture(pagamento);
+        }
+
+        @Override
+        public CompletableFuture<Pagamento> executarPorTransacaoExternaId(String transacaoExternaId) {
+            this.transacaoExternaId = transacaoExternaId;
             return CompletableFuture.completedFuture(pagamento);
         }
     }

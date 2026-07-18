@@ -2,6 +2,7 @@ package br.com.oficina.billing.framework.payments;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -221,6 +222,156 @@ class MercadoPagoPagamentoGatewayTest {
         assertLowCardinalityTags();
     }
 
+    @Test
+    void deveConsultarPagamentoEPreservarInstrucoesPixPendentes() {
+        var expiration = OffsetDateTime.parse("2026-01-01T12:30:00Z");
+        MercadoPagoQueryClient queryClient = (authorization, paymentId) -> {
+            assertEquals("Bearer token-teste", authorization);
+            assertEquals("123456", paymentId);
+            return new MercadoPagoPaymentResponse(
+                    123456L,
+                    "pending",
+                    "pending_waiting_payment",
+                    expiration,
+                    new MercadoPagoPaymentResponse.PointOfInteraction(
+                            new MercadoPagoPaymentResponse.TransactionData(
+                                    "pix-copia-e-cola", "base64", "https://example.test/pix")));
+        };
+        var gateway = new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) -> {
+                    throw new AssertionError("Criacao nao deveria ser chamada.");
+                },
+                queryClient,
+                new MercadoPagoMetrics(registry, true, "test"),
+                true,
+                Optional.of("token-teste"),
+                "cliente.local@oficina.com");
+        var base = pagamento(MetodoPagamento.PIX);
+        var integrated = new Pagamento(
+                base.pagamentoId(),
+                base.ordemServicoId(),
+                base.orcamentoId(),
+                base.valor(),
+                base.metodo(),
+                base.status(),
+                "mercado-pago",
+                "123456",
+                base.criadoEm(),
+                base.atualizadoEm());
+
+        var result = gateway.consultar(integrated).join();
+
+        assertEquals(StatusPagamento.CRIADO, result.status());
+        assertEquals("pix-copia-e-cola", result.instrucoesPix().copiaECola());
+        assertEquals(expiration, result.instrucoesPix().expiraEm());
+    }
+
+    @Test
+    void deveConsultarPagamentoAprovadoOuRecusado() {
+        var approvedGateway = queryGateway(
+                (authorization, paymentId) -> new MercadoPagoPaymentResponse(123456L, "approved", "accredited"),
+                true,
+                Optional.of("token-teste"));
+        var rejectedGateway = queryGateway(
+                (authorization, paymentId) -> new MercadoPagoPaymentResponse(123456L, "refunded", null),
+                true,
+                Optional.of("token-teste"));
+        var payment = integratedPayment("123456");
+
+        var approved = approvedGateway.consultar(payment).join();
+        var rejected = rejectedGateway.consultar(payment).join();
+
+        assertEquals(StatusPagamento.CONFIRMADO, approved.status());
+        assertEquals(StatusPagamento.RECUSADO, rejected.status());
+        assertEquals("Pagamento nao autorizado pelo Mercado Pago.", rejected.motivo());
+    }
+
+    @Test
+    void deveMapearFalhaHttpNaConsulta() {
+        var gateway = queryGateway(
+                (authorization, paymentId) -> {
+                    throw new WebApplicationException(Response.status(Response.Status.NOT_FOUND).build());
+                },
+                true,
+                Optional.of("token-teste"));
+        var payment = integratedPayment("123456");
+
+        var exception = assertThrows(BusinessException.class, () -> gateway.consultar(payment));
+
+        assertEquals("DEPENDENCY_FAILURE", exception.code());
+        assertEquals(1.0, failureCount("provider_http_error"));
+    }
+
+    @Test
+    void deveMapearTimeoutEComunicacaoNaConsulta() {
+        var timeoutGateway = queryGateway(
+                (authorization, paymentId) -> {
+                    throw new ProcessingException(new java.net.SocketTimeoutException("provider late"));
+                },
+                true,
+                Optional.of("token-teste"));
+        var payment = integratedPayment("123456");
+
+        assertThrows(BusinessException.class, () -> timeoutGateway.consultar(payment));
+        assertEquals(1.0, failureCount("timeout"));
+
+        var communicationGateway = queryGateway(
+                (authorization, paymentId) -> {
+                    throw new ProcessingException("connection reset");
+                },
+                true,
+                Optional.of("token-teste"));
+        assertThrows(BusinessException.class, () -> communicationGateway.consultar(payment));
+        assertEquals(1.0, failureCount("communication"));
+    }
+
+    @Test
+    void deveRejeitarConfiguracaoOuRespostaInvalidaNaConsulta() {
+        var unconfigured = queryGateway(
+                (authorization, paymentId) -> new MercadoPagoPaymentResponse(123456L, "pending", null),
+                true,
+                Optional.of(" "));
+        var payment = integratedPayment("123456");
+
+        var configurationFailure = assertThrows(BusinessException.class, () -> unconfigured.consultar(payment));
+        assertEquals("DEPENDENCY_UNAVAILABLE", configurationFailure.code());
+
+        var invalidResponse = queryGateway(
+                (authorization, paymentId) -> new MercadoPagoPaymentResponse(null, "pending", null),
+                true,
+                Optional.of("token-teste"));
+        var dependencyFailure = assertThrows(BusinessException.class, () -> invalidResponse.consultar(payment));
+        assertEquals("DEPENDENCY_FAILURE", dependencyFailure.code());
+        assertEquals(1.0, failureCount("invalid_response"));
+    }
+
+    @Test
+    void deveIgnorarInstrucoesPixAusentesOuSemCodigo() {
+        var withoutData = queryGateway(
+                (authorization, paymentId) -> new MercadoPagoPaymentResponse(
+                        123456L,
+                        "pending",
+                        null,
+                        null,
+                        new MercadoPagoPaymentResponse.PointOfInteraction(null)),
+                true,
+                Optional.of("token-teste"));
+        var withoutCode = queryGateway(
+                (authorization, paymentId) -> new MercadoPagoPaymentResponse(
+                        123456L,
+                        "pending",
+                        null,
+                        null,
+                        new MercadoPagoPaymentResponse.PointOfInteraction(
+                                new MercadoPagoPaymentResponse.TransactionData(" ", null, null))),
+                true,
+                Optional.of("token-teste"));
+        var payment = integratedPayment("123456");
+
+        assertNull(withoutData.consultar(payment).join().instrucoesPix());
+        assertNull(withoutCode.consultar(payment).join().instrucoesPix());
+    }
+
     private Pagamento pagamento(MetodoPagamento metodo) {
         var now = OffsetDateTime.now();
         return new Pagamento(
@@ -236,12 +387,42 @@ class MercadoPagoPagamentoGatewayTest {
                 now);
     }
 
+    private Pagamento integratedPayment(String externalTransactionId) {
+        var base = pagamento(MetodoPagamento.PIX);
+        return new Pagamento(
+                base.pagamentoId(),
+                base.ordemServicoId(),
+                base.orcamentoId(),
+                base.valor(),
+                base.metodo(),
+                base.status(),
+                "mercado-pago",
+                externalTransactionId,
+                base.criadoEm(),
+                base.atualizadoEm());
+    }
+
     private MercadoPagoPagamentoGateway gateway(
             MercadoPagoClient client,
             boolean enabled,
             Optional<String> accessToken) {
         return new MercadoPagoPagamentoGateway(
                 client,
+                new MercadoPagoMetrics(registry, enabled, "test"),
+                enabled,
+                accessToken,
+                "cliente.local@oficina.com");
+    }
+
+    private MercadoPagoPagamentoGateway queryGateway(
+            MercadoPagoQueryClient queryClient,
+            boolean enabled,
+            Optional<String> accessToken) {
+        return new MercadoPagoPagamentoGateway(
+                (authorization, idempotencyKey, request) -> {
+                    throw new AssertionError("Criacao nao deveria ser chamada.");
+                },
+                queryClient,
                 new MercadoPagoMetrics(registry, enabled, "test"),
                 enabled,
                 accessToken,
