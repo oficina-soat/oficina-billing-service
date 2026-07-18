@@ -23,6 +23,18 @@ public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     }
 
     @Override
+    public synchronized CompletableFuture<CreateResult> createIfAbsent(Pagamento pagamento) {
+        var existente = storage.values().stream()
+                .filter(item -> item.orcamentoId().equals(pagamento.orcamentoId()))
+                .findFirst();
+        if (existente.isPresent()) {
+            return CompletableFuture.completedFuture(new CreateResult(existente.orElseThrow(), false));
+        }
+        storage.put(pagamento.pagamentoId(), pagamento);
+        return CompletableFuture.completedFuture(new CreateResult(pagamento, true));
+    }
+
+    @Override
     public CompletableFuture<Optional<Pagamento>> findById(UUID pagamentoId) {
         return CompletableFuture.completedFuture(Optional.ofNullable(storage.get(pagamentoId)));
     }

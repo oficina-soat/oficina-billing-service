@@ -33,6 +33,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -193,6 +194,40 @@ class PostgresBillingRepositoryTest {
         assertEquals(StatusPagamento.CONFIRMADO, pagamentoConfirmado.status());
         assertEquals("mercado-pago", pagamentoConfirmado.provedor());
         assertEquals("mp-postgres-test", pagamentoConfirmado.transacaoExternaId());
+    }
+
+    @Test
+    void deveCriarPagamentoUmaUnicaVezSobConcorrenciaNoPostgreSQL() {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.randomUUID();
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        orcamentoRepository.save(new Orcamento(
+                orcamentoId,
+                ordemServicoId,
+                List.of(),
+                BigDecimal.ZERO,
+                StatusOrcamento.APROVADO,
+                now,
+                now)).join();
+        var pagamento = new Pagamento(
+                UUID.randomUUID(),
+                ordemServicoId,
+                orcamentoId,
+                BigDecimal.ZERO,
+                MetodoPagamento.PIX,
+                StatusPagamento.CRIADO,
+                null,
+                null,
+                now,
+                now);
+
+        var first = CompletableFuture.supplyAsync(() -> pagamentoRepository.createIfAbsent(pagamento).join());
+        var second = CompletableFuture.supplyAsync(() -> pagamentoRepository.createIfAbsent(pagamento).join());
+        var results = List.of(first.join(), second.join());
+
+        assertEquals(1, results.stream().filter(PagamentoRepositoryGateway.CreateResult::created).count());
+        assertTrue(results.stream().allMatch(result -> result.pagamento().pagamentoId().equals(pagamento.pagamentoId())));
+        assertEquals(1, pagamentoRepository.findByOrdemServicoId(ordemServicoId).join().size());
     }
 
     @Test

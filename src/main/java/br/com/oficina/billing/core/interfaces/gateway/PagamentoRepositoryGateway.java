@@ -9,6 +9,8 @@ import java.util.concurrent.CompletableFuture;
 public interface PagamentoRepositoryGateway {
     CompletableFuture<Pagamento> save(Pagamento pagamento);
 
+    CompletableFuture<CreateResult> createIfAbsent(Pagamento pagamento);
+
     CompletableFuture<Optional<Pagamento>> findById(UUID pagamentoId);
 
     CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId);
@@ -16,4 +18,7 @@ public interface PagamentoRepositoryGateway {
     CompletableFuture<Optional<Pagamento>> findByOrcamentoId(UUID orcamentoId);
 
     CompletableFuture<List<Pagamento>> findAll();
+
+    record CreateResult(Pagamento pagamento, boolean created) {
+    }
 }

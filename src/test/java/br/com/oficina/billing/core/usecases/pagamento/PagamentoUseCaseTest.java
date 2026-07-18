@@ -169,7 +169,6 @@ class PagamentoUseCaseTest {
         var registrarPagamentoUseCase = registrarPagamentoUseCase(pagamentoRepository, gatewayNaoIntegrado());
         var solicitarPagamentoDaOrdemUseCase = new SolicitarPagamentoDaOrdemUseCase(
                 orcamentoRepository,
-                pagamentoRepository,
                 registrarPagamentoUseCase);
         var consultarPagamentosDaOrdemServicoUseCase =
                 new ConsultarPagamentosDaOrdemServicoUseCase(pagamentoRepository);

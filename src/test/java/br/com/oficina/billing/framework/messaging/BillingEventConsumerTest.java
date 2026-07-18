@@ -24,7 +24,10 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -48,7 +51,7 @@ class BillingEventConsumerTest {
     private final BillingEventConsumer consumer = new BillingEventConsumer(
             store,
             gerarOrcamentoUseCase,
-            new SolicitarPagamentoDaOrdemUseCase(orcamentoRepository, pagamentoRepository, registrarPagamentoUseCase),
+            new SolicitarPagamentoDaOrdemUseCase(orcamentoRepository, registrarPagamentoUseCase),
             new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
     private final OutboxPublisher publisher = new OutboxPublisher(store);
 
@@ -141,7 +144,7 @@ class BillingEventConsumerTest {
                 store,
                 useCase,
                 new SolicitarPagamentoDaOrdemUseCase(
-                        orcamentoRepository, pagamentoRepository, registrarPagamentoUseCase),
+                        orcamentoRepository, registrarPagamentoUseCase),
                 new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
         var evento = envelope(eventId, "diagnosticoFinalizado", ordemServicoId, Map.of(
                 "ordemServicoId", ordemServicoId.toString(),
@@ -182,7 +185,7 @@ class BillingEventConsumerTest {
                 store,
                 useCase,
                 new SolicitarPagamentoDaOrdemUseCase(
-                        orcamentoRepository, pagamentoRepository, registrarPagamentoUseCase),
+                        orcamentoRepository, registrarPagamentoUseCase),
                 new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
         var evento = envelope(eventId, "diagnosticoFinalizado", ordemServicoId, Map.of(
                 "ordemServicoId", ordemServicoId.toString(),
@@ -234,6 +237,55 @@ class BillingEventConsumerTest {
     }
 
     @Test
+    void deveCriarUmPagamentoEUmaOutboxComEventosDeFinalizacaoConcorrentes() {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
+        aprovarOrcamentoUseCase.executar(
+                new AprovarOrcamentoUseCase.Command(orcamento.orcamentoId(), "Aprovado pelo cliente")).join();
+        var barrier = new CyclicBarrier(2);
+        var gatewayCalls = new AtomicInteger();
+        var paymentIds = java.util.concurrent.ConcurrentHashMap.<UUID>newKeySet();
+        var concurrentRegistrar = new RegistrarPagamentoUseCase(
+                pagamentoRepository,
+                orcamentoRepository,
+                store,
+                pagamento -> {
+                    gatewayCalls.incrementAndGet();
+                    paymentIds.add(pagamento.pagamentoId());
+                    await(barrier);
+                    return CompletableFuture.completedFuture(PagamentoGatewayResult.naoIntegrado());
+                });
+        var concurrentConsumer = new BillingEventConsumer(
+                store,
+                gerarOrcamentoUseCase,
+                new SolicitarPagamentoDaOrdemUseCase(orcamentoRepository, concurrentRegistrar),
+                new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
+        var execucaoFinalizada = envelope(
+                UUID.randomUUID(),
+                "execucaoFinalizada",
+                ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId.toString()));
+        var ordemFinalizada = envelope(
+                UUID.randomUUID(),
+                "ordemDeServicoFinalizada",
+                ordemServicoId,
+                Map.of("ordemServicoId", ordemServicoId.toString()));
+
+        var consumos = CompletableFuture.allOf(
+                CompletableFuture.runAsync(() -> assertTrue(concurrentConsumer.consumir(execucaoFinalizada))),
+                CompletableFuture.runAsync(() -> assertTrue(concurrentConsumer.consumir(ordemFinalizada))));
+        consumos.orTimeout(10, TimeUnit.SECONDS).join();
+
+        assertEquals(2, gatewayCalls.get());
+        assertEquals(1, paymentIds.size());
+        assertEquals(1, pagamentoRepository.findByOrdemServicoId(ordemServicoId).join().size());
+        assertEquals(1, store.listarOutbox().stream()
+                .filter(event -> event.eventType().equals("pagamentoSolicitado")
+                        && event.payload().get("ordemServicoId").equals(ordemServicoId.toString()))
+                .count());
+    }
+
+    @Test
     void devePublicarEventosPendentesDaOutbox() {
         var ordemServicoId = UUID.randomUUID();
         var orcamento = gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(ordemServicoId)).join();
@@ -278,6 +330,14 @@ class BillingEventConsumerTest {
                 "quantidade", BigDecimal.ONE,
                 "valorUnitario", new BigDecimal("10.00"),
                 "valorTotal", new BigDecimal("10.00"));
+    }
+
+    private void await(CyclicBarrier barrier) {
+        try {
+            barrier.await(5, TimeUnit.SECONDS);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Consumidores nao alcancaram a barreira concorrente.", exception);
+        }
     }
 
     private DomainEventEnvelope envelope(UUID eventId, String eventType, UUID ordemServicoId, Map<String, Object> payload) {
