@@ -69,7 +69,7 @@ public class MercadoPagoWebhookSignatureValidator {
     private Long parseTimestamp(String value) {
         try {
             return value == null ? null : Long.valueOf(value);
-        } catch (NumberFormatException exception) {
+        } catch (NumberFormatException _) {
             return null;
         }
     }

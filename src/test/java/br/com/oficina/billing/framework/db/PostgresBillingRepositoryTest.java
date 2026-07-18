@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import br.com.oficina.billing.core.entities.ItemOrcamento;
+import br.com.oficina.billing.core.entities.InstrucoesPix;
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Orcamento;
 import br.com.oficina.billing.core.entities.Pagamento;
@@ -194,6 +195,80 @@ class PostgresBillingRepositoryTest {
         assertEquals(StatusPagamento.CONFIRMADO, pagamentoConfirmado.status());
         assertEquals("mercado-pago", pagamentoConfirmado.provedor());
         assertEquals("mp-postgres-test", pagamentoConfirmado.transacaoExternaId());
+    }
+
+    @Test
+    void devePersistirPixBuscarTransacaoEAtualizarStatusCondicionalmente() {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.randomUUID();
+        var pagamentoId = UUID.randomUUID();
+        var now = OffsetDateTime.parse("2026-07-18T18:00:00Z");
+        var expiration = now.plusMinutes(30);
+        orcamentoRepository.save(new Orcamento(
+                orcamentoId,
+                ordemServicoId,
+                List.of(),
+                new BigDecimal("190.00"),
+                StatusOrcamento.APROVADO,
+                now,
+                now)).join();
+        var instructions = new InstrucoesPix(
+                "pix-copia-e-cola",
+                "qr-code-base64",
+                "https://example.test/pix",
+                expiration);
+        var pending = new Pagamento(
+                pagamentoId,
+                ordemServicoId,
+                orcamentoId,
+                new BigDecimal("190.00"),
+                MetodoPagamento.PIX,
+                StatusPagamento.CRIADO,
+                "mercado-pago",
+                "mp-pix-" + pagamentoId,
+                instructions,
+                now,
+                now);
+
+        pagamentoRepository.save(pending).join();
+
+        var persisted = pagamentoRepository.findByTransacaoExternaId(pending.transacaoExternaId())
+                .join().orElseThrow();
+        assertEquals(instructions, persisted.instrucoesPix());
+        assertTrue(pagamentoRepository.findByTransacaoExternaId("missing-transaction").join().isEmpty());
+
+        var confirmed = new Pagamento(
+                persisted.pagamentoId(),
+                persisted.ordemServicoId(),
+                persisted.orcamentoId(),
+                persisted.valor(),
+                persisted.metodo(),
+                StatusPagamento.CONFIRMADO,
+                persisted.provedor(),
+                persisted.transacaoExternaId(),
+                persisted.instrucoesPix(),
+                persisted.criadoEm(),
+                now.plusMinutes(1));
+        var firstUpdate = pagamentoRepository.updateIfStatus(confirmed, StatusPagamento.CRIADO).join();
+        var concurrentUpdate = pagamentoRepository.updateIfStatus(
+                new Pagamento(
+                        confirmed.pagamentoId(),
+                        confirmed.ordemServicoId(),
+                        confirmed.orcamentoId(),
+                        confirmed.valor(),
+                        confirmed.metodo(),
+                        StatusPagamento.RECUSADO,
+                        confirmed.provedor(),
+                        confirmed.transacaoExternaId(),
+                        confirmed.instrucoesPix(),
+                        confirmed.criadoEm(),
+                        now.plusMinutes(2)),
+                StatusPagamento.CRIADO).join();
+
+        assertTrue(firstUpdate.updated());
+        assertFalse(concurrentUpdate.updated());
+        assertEquals(StatusPagamento.CONFIRMADO, concurrentUpdate.pagamento().status());
+        assertEquals(instructions, concurrentUpdate.pagamento().instrucoesPix());
     }
 
     @Test

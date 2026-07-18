@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Orcamento;
+import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
@@ -327,6 +328,68 @@ class PagamentoUseCaseTest {
         var erroEstado = assertFutureThrows(BusinessException.class, () ->
                 cancelarPagamentoUseCase.executar(new CancelarPagamentoUseCase.Command(cancelado.pagamentoId())));
         assertEquals("INVALID_STATE_TRANSITION", erroEstado.code());
+    }
+
+    @Test
+    void deveBloquearAcoesManuaisEmPagamentoIntegrado() {
+        var repository = new InMemoryPagamentoDataSourceAdapter();
+        var now = OffsetDateTime.parse("2026-07-18T18:00:00Z");
+        var integrated = new Pagamento(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                BigDecimal.TEN,
+                MetodoPagamento.PIX,
+                StatusPagamento.CRIADO,
+                "mercado-pago",
+                "mp-123",
+                now,
+                now);
+        repository.save(integrated).join();
+
+        var confirmationFailure = assertFutureThrows(
+                BusinessException.class,
+                () -> new ConfirmarPagamentoUseCase(repository, eventStore).executar(
+                        new ConfirmarPagamentoUseCase.Command(integrated.pagamentoId(), "manual", "receipt")));
+        var rejectionFailure = assertFutureThrows(
+                BusinessException.class,
+                () -> new RecusarPagamentoUseCase(repository, eventStore).executar(
+                        new RecusarPagamentoUseCase.Command(integrated.pagamentoId(), "manual", "reason")));
+        var cancellationFailure = assertFutureThrows(
+                BusinessException.class,
+                () -> new CancelarPagamentoUseCase(repository).executar(
+                        new CancelarPagamentoUseCase.Command(integrated.pagamentoId())));
+
+        assertEquals("INVALID_STATE_TRANSITION", confirmationFailure.code());
+        assertEquals("INVALID_STATE_TRANSITION", rejectionFailure.code());
+        assertEquals("INVALID_STATE_TRANSITION", cancellationFailure.code());
+    }
+
+    @Test
+    void deveBloquearMercadoPagoInformadoEmPagamentoAindaManual() {
+        var repository = new InMemoryPagamentoDataSourceAdapter();
+        var now = OffsetDateTime.parse("2026-07-18T18:00:00Z");
+        var manual = new Pagamento(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                BigDecimal.TEN,
+                MetodoPagamento.PIX,
+                StatusPagamento.CRIADO,
+                null,
+                null,
+                now,
+                now);
+        repository.save(manual).join();
+
+        assertFutureThrows(
+                BusinessException.class,
+                () -> new ConfirmarPagamentoUseCase(repository, eventStore).executar(
+                        new ConfirmarPagamentoUseCase.Command(manual.pagamentoId(), "mercado-pago", "mp-123")));
+        assertFutureThrows(
+                BusinessException.class,
+                () -> new RecusarPagamentoUseCase(repository, eventStore).executar(
+                        new RecusarPagamentoUseCase.Command(manual.pagamentoId(), "mercado-pago", "reason")));
     }
 
     @Test

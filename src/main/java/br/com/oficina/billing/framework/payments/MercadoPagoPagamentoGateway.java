@@ -20,6 +20,7 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 @ApplicationScoped
 public class MercadoPagoPagamentoGateway implements PagamentoGateway {
     private static final String PROVEDOR = "mercado-pago";
+    private static final String TIMEOUT_REASON = "timeout";
 
     private final MercadoPagoClient client;
     private final MercadoPagoQueryClient queryClient;
@@ -88,7 +89,7 @@ public class MercadoPagoPagamentoGateway implements PagamentoGateway {
                     "DEPENDENCY_FAILURE",
                     "Mercado Pago recusou a consulta do pagamento com HTTP " + status + ".");
         } catch (ProcessingException exception) {
-            var reason = isTimeout(exception) ? "timeout" : "communication";
+            var reason = isTimeout(exception) ? TIMEOUT_REASON : "communication";
             metrics.recordFailure(pagamento, reason, true, sample);
             throw new BusinessException(
                     "DEPENDENCY_FAILURE",
@@ -135,7 +136,7 @@ public class MercadoPagoPagamentoGateway implements PagamentoGateway {
                     "Mercado Pago recusou a solicitacao de pagamento com HTTP "
                             + status + ".");
         } catch (ProcessingException exception) {
-            var reason = isTimeout(exception) ? "timeout" : "communication";
+            var reason = isTimeout(exception) ? TIMEOUT_REASON : "communication";
             metrics.recordFailure(pagamento, reason, true, sample);
             throw new BusinessException(
                     "DEPENDENCY_FAILURE",
@@ -198,7 +199,7 @@ public class MercadoPagoPagamentoGateway implements PagamentoGateway {
             if (current instanceof java.net.SocketTimeoutException
                     || current instanceof java.net.http.HttpTimeoutException
                     || current instanceof TimeoutException
-                    || (message != null && message.toLowerCase(Locale.ROOT).contains("timeout"))) {
+                    || (message != null && message.toLowerCase(Locale.ROOT).contains(TIMEOUT_REASON))) {
                 return true;
             }
             current = current.getCause();

@@ -40,6 +40,43 @@ class MercadoPagoWebhookSignatureValidatorTest {
                 .isValid(signature, requestId, dataId));
     }
 
+    @Test
+    void deveRejeitarCamposObrigatoriosAusentes() {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
+
+        assertFalse(new MercadoPagoWebhookSignatureValidator(null, 300, CLOCK)
+                .isValid("signature", "request-1", "123456"));
+        assertFalse(validator.isValid("signature", null, "123456"));
+        assertFalse(validator.isValid("signature", " ", "123456"));
+        assertFalse(validator.isValid("signature", "request-1", null));
+        assertFalse(validator.isValid("signature", "request-1", " "));
+    }
+
+    @Test
+    void deveRejeitarAssinaturaAusenteOuMalformada() {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
+
+        assertFalse(validator.isValid(null, "request-1", "123456"));
+        assertFalse(validator.isValid(" ", "request-1", "123456"));
+        assertFalse(validator.isValid("invalid", "request-1", "123456"));
+        assertFalse(validator.isValid("ts=not-a-number,v1=hash", "request-1", "123456"));
+        assertFalse(validator.isValid("ts=" + TIMESTAMP, "request-1", "123456"));
+        assertFalse(validator.isValid("ts=" + TIMESTAMP + ",v1=", "request-1", "123456"));
+    }
+
+    @Test
+    void devePreservarPrimeiroComponenteDuplicadoEExigirToleranciaPositiva() throws Exception {
+        var dataId = "123456";
+        var requestId = "request-1";
+        var hash = signature(dataId, requestId);
+        var duplicateTimestamp = "ts=" + TIMESTAMP + ",ts=0,v1=" + hash;
+
+        assertTrue(new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK)
+                .isValid(duplicateTimestamp, requestId, dataId));
+        assertFalse(new MercadoPagoWebhookSignatureValidator(SECRET, 0, CLOCK)
+                .isValid("ts=" + TIMESTAMP + ",v1=" + hash, requestId, dataId));
+    }
+
     private String signature(String dataId, String requestId) throws Exception {
         return signature(dataId, requestId, TIMESTAMP);
     }
