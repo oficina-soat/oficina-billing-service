@@ -4,6 +4,7 @@ import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 final class PagamentoEventPayloads {
@@ -24,6 +25,27 @@ final class PagamentoEventPayloads {
     }
 
     static CompletableFuture<Void> registrarEvento(Registro registro) {
+        return registro.outboxEventSender().registrarOutbox(
+                registro.pagamento().pagamentoId().toString(),
+                registro.evento().eventType(),
+                registro.evento().topic(),
+                payload(registro),
+                null,
+                registro.ocorridoEm());
+    }
+
+    static CompletableFuture<Void> registrarEventoIdempotente(UUID eventId, Registro registro) {
+        return registro.outboxEventSender().registrarOutboxIdempotente(
+                eventId,
+                registro.pagamento().pagamentoId().toString(),
+                registro.evento().eventType(),
+                registro.evento().topic(),
+                payload(registro),
+                null,
+                registro.ocorridoEm());
+    }
+
+    private static LinkedHashMap<String, Object> payload(Registro registro) {
         var payload = new LinkedHashMap<String, Object>();
         var pagamento = registro.pagamento();
         payload.put("pagamentoId", pagamento.pagamentoId().toString());
@@ -46,13 +68,7 @@ final class PagamentoEventPayloads {
             payload.put("motivo", registro.motivo());
         }
         payload.put(evento.timestampField(), registro.ocorridoEm().toString());
-        return registro.outboxEventSender().registrarOutbox(
-                pagamento.pagamentoId().toString(),
-                evento.eventType(),
-                evento.topic(),
-                payload,
-                null,
-                registro.ocorridoEm());
+        return payload;
     }
 
     record Evento(String eventType, String topic, String timestampField) {

@@ -50,6 +50,21 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
                 criado_em = EXCLUDED.criado_em,
                 atualizado_em = EXCLUDED.atualizado_em
             """;
+    private static final String INSERT_PAGAMENTO_IF_ABSENT = """
+            INSERT INTO pagamento (
+                id,
+                ordem_de_servico_id,
+                orcamento_id,
+                valor,
+                metodo,
+                status,
+                provedor,
+                transacao_externa_id,
+                criado_em,
+                atualizado_em
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT DO NOTHING
+            """;
 
     private static final String SELECT_PAGAMENTO_BY_ID = """
             SELECT id, ordem_de_servico_id, orcamento_id, valor, metodo, status, provedor,
@@ -101,21 +116,46 @@ public class PostgresPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     private Pagamento saveBlocking(Pagamento pagamento) {
         try (var connection = dataSource.getConnection();
                 var statement = connection.prepareStatement(UPSERT_PAGAMENTO)) {
-            statement.setObject(1, pagamento.pagamentoId());
-            statement.setObject(2, pagamento.ordemServicoId());
-            statement.setObject(3, pagamento.orcamentoId());
-            statement.setBigDecimal(4, pagamento.valor());
-            statement.setString(5, pagamento.metodo().name());
-            statement.setString(6, pagamento.status().name());
-            statement.setString(7, pagamento.provedor());
-            statement.setString(8, pagamento.transacaoExternaId());
-            statement.setObject(9, pagamento.criadoEm());
-            statement.setObject(10, pagamento.atualizadoEm());
+            bindPagamento(statement, pagamento);
             statement.executeUpdate();
             return pagamento;
         } catch (SQLException exception) {
             throw persistenceFailure(exception);
         }
+    }
+
+    @Override
+    public CompletableFuture<CreateResult> createIfAbsent(Pagamento pagamento) {
+        return CompletableFuture.completedFuture(metrics.persistence(
+                DATABASE, RESOURCE, "create_if_absent", () -> createIfAbsentBlocking(pagamento)));
+    }
+
+    private CreateResult createIfAbsentBlocking(Pagamento pagamento) {
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(INSERT_PAGAMENTO_IF_ABSENT)) {
+            bindPagamento(statement, pagamento);
+            if (statement.executeUpdate() > 0) {
+                return new CreateResult(pagamento, true);
+            }
+        } catch (SQLException exception) {
+            throw persistenceFailure(exception);
+        }
+        var existente = findOne(SELECT_PAGAMENTO_BY_ORCAMENTO, pagamento.orcamentoId())
+                .orElseThrow(() -> new IllegalStateException("Pagamento concorrente nao encontrado apos conflito."));
+        return new CreateResult(existente, false);
+    }
+
+    private void bindPagamento(java.sql.PreparedStatement statement, Pagamento pagamento) throws SQLException {
+        statement.setObject(1, pagamento.pagamentoId());
+        statement.setObject(2, pagamento.ordemServicoId());
+        statement.setObject(3, pagamento.orcamentoId());
+        statement.setBigDecimal(4, pagamento.valor());
+        statement.setString(5, pagamento.metodo().name());
+        statement.setString(6, pagamento.status().name());
+        statement.setString(7, pagamento.provedor());
+        statement.setString(8, pagamento.transacaoExternaId());
+        statement.setObject(9, pagamento.criadoEm());
+        statement.setObject(10, pagamento.atualizadoEm());
     }
 
     @Override

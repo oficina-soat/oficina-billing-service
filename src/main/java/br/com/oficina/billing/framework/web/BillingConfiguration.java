@@ -131,11 +131,9 @@ public class BillingConfiguration {
     @ApplicationScoped
     SolicitarPagamentoDaOrdemUseCase solicitarPagamentoDaOrdemUseCase(
             OrcamentoRepositoryGateway orcamentoRepository,
-            PagamentoRepositoryGateway pagamentoRepository,
             RegistrarPagamentoUseCase registrarPagamentoUseCase) {
         return new SolicitarPagamentoDaOrdemUseCase(
                 orcamentoRepository,
-                pagamentoRepository,
                 registrarPagamentoUseCase);
     }
 

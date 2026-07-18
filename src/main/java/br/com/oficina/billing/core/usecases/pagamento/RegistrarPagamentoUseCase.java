@@ -12,6 +12,7 @@ import br.com.oficina.billing.core.interfaces.gateway.PagamentoGatewayResult;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -46,15 +47,27 @@ public class RegistrarPagamentoUseCase {
     }
 
     public CompletableFuture<Pagamento> executar(Command command) {
+        return executar(command, null);
+    }
+
+    CompletableFuture<Pagamento> executarIdempotente(Command command, UUID idempotencyReferenceId) {
+        return executar(command, new IdempotentIdentity(
+                deterministicId("pagamento", idempotencyReferenceId),
+                deterministicId("pagamentoSolicitado", idempotencyReferenceId)));
+    }
+
+    private CompletableFuture<Pagamento> executar(Command command, IdempotentIdentity identity) {
         return pagamentoRepository.findByOrcamentoId(command.orcamentoId())
                 .thenCompose(existente -> {
                     if (existente.isPresent()) {
-                        throw new BusinessException(
-                                "DUPLICATE_RESOURCE",
-                                "O orcamento informado ja possui pagamento registrado.");
+                        return pagamentoExistente(existente.orElseThrow(), identity);
                     }
-                    return orcamentoRepository.findById(command.orcamentoId());
-                })
+                    return criarPagamento(command, identity);
+                });
+    }
+
+    private CompletableFuture<Pagamento> criarPagamento(Command command, IdempotentIdentity identity) {
+        return orcamentoRepository.findById(command.orcamentoId())
                 .thenCompose(optional -> {
                     var orcamento = optional.orElseThrow(() ->
                             new ResourceNotFoundException("Orcamento nao encontrado."));
@@ -74,7 +87,7 @@ public class RegistrarPagamentoUseCase {
 
                     var now = OffsetDateTime.now(clock);
                     var pagamento = new Pagamento(
-                            UUID.randomUUID(),
+                            identity == null ? UUID.randomUUID() : identity.pagamentoId(),
                             command.ordemServicoId(),
                             command.orcamentoId(),
                             command.valor(),
@@ -85,17 +98,65 @@ public class RegistrarPagamentoUseCase {
                             now,
                             now);
                     return pagamentoGateway.solicitar(pagamento)
-                            .thenCompose(resultadoGateway -> pagamentoRepository.save(pagamento)
-                                    .thenCompose(salvo -> PagamentoEventPayloads.registrarEvento(new PagamentoEventPayloads.Registro(
-                                            outboxEventSender,
-                                            salvo,
-                                            PagamentoEventPayloads.PAGAMENTO_SOLICITADO,
-                                            now,
-                                            null,
-                                            null))
-                                            .thenCompose(ignored ->
-                                                    aplicarResultadoGateway(salvo, resultadoGateway))));
+                            .thenCompose(resultadoGateway -> pagamentoRepository.createIfAbsent(pagamento)
+                                    .thenCompose(resultadoCriacao -> concluirCriacao(
+                                            resultadoCriacao, resultadoGateway, identity, now)));
                 });
+    }
+
+    private CompletableFuture<Pagamento> pagamentoExistente(Pagamento pagamento, IdempotentIdentity identity) {
+        if (identity == null) {
+            throw duplicatePayment();
+        }
+        if (!pagamento.pagamentoId().equals(identity.pagamentoId())) {
+            return CompletableFuture.completedFuture(pagamento);
+        }
+        return registrarPagamentoSolicitado(pagamento, identity, pagamento.criadoEm())
+                .thenApply(ignored -> pagamento);
+    }
+
+    private CompletableFuture<Pagamento> concluirCriacao(
+            PagamentoRepositoryGateway.CreateResult resultadoCriacao,
+            PagamentoGatewayResult resultadoGateway,
+            IdempotentIdentity identity,
+            OffsetDateTime ocorridoEm) {
+        var pagamento = resultadoCriacao.pagamento();
+        if (!resultadoCriacao.created()) {
+            if (identity == null) {
+                throw duplicatePayment();
+            }
+            return pagamentoExistente(pagamento, identity);
+        }
+        return registrarPagamentoSolicitado(pagamento, identity, ocorridoEm)
+                .thenCompose(ignored -> aplicarResultadoGateway(pagamento, resultadoGateway));
+    }
+
+    private CompletableFuture<Void> registrarPagamentoSolicitado(
+            Pagamento pagamento,
+            IdempotentIdentity identity,
+            OffsetDateTime ocorridoEm) {
+        var registro = new PagamentoEventPayloads.Registro(
+                outboxEventSender,
+                pagamento,
+                PagamentoEventPayloads.PAGAMENTO_SOLICITADO,
+                ocorridoEm,
+                null,
+                null);
+        return identity == null
+                ? PagamentoEventPayloads.registrarEvento(registro)
+                : PagamentoEventPayloads.registrarEventoIdempotente(identity.outboxEventId(), registro);
+    }
+
+    private BusinessException duplicatePayment() {
+        return new BusinessException(
+                "DUPLICATE_RESOURCE",
+                "O orcamento informado ja possui pagamento registrado.");
+    }
+
+    private UUID deterministicId(String purpose, UUID idempotencyReferenceId) {
+        return UUID.nameUUIDFromBytes(
+                ("pagamento:" + purpose + ":" + idempotencyReferenceId)
+                        .getBytes(StandardCharsets.UTF_8));
     }
 
     private CompletableFuture<Pagamento> aplicarResultadoGateway(Pagamento pagamento, PagamentoGatewayResult resultado) {
@@ -140,5 +201,8 @@ public class RegistrarPagamentoUseCase {
     }
 
     public record Command(UUID ordemServicoId, UUID orcamentoId, BigDecimal valor, MetodoPagamento metodo) {
+    }
+
+    private record IdempotentIdentity(UUID pagamentoId, UUID outboxEventId) {
     }
 }
