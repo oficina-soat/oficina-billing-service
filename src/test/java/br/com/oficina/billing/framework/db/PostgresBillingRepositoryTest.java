@@ -223,6 +223,21 @@ class PostgresBillingRepositoryTest {
                 .filter(event -> event.eventId().equals(pendente.eventId()))
                 .allMatch(event -> event.status().equals("PUBLISHED") && event.publishedAt() != null));
 
+        var idempotentOutboxId = UUID.randomUUID();
+        for (var attempt = 0; attempt < 2; attempt++) {
+            eventStore.registrarOutboxIdempotente(
+                    idempotentOutboxId,
+                    ordemServicoId.toString(),
+                    "orcamentoGerado",
+                    "oficina.billing.orcamento-gerado",
+                    Map.of("ordemServicoId", ordemServicoId.toString()),
+                    "postgres-idempotent-outbox-test",
+                    OffsetDateTime.now(ZoneOffset.UTC)).join();
+        }
+        assertEquals(1, restartedStore.listarOutbox().stream()
+                .filter(event -> event.eventId().equals(idempotentOutboxId))
+                .count());
+
         eventStore.registrarOutbox(
                 ordemServicoId.toString(),
                 "pagamentoSolicitado",

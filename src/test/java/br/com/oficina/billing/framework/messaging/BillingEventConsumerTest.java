@@ -24,6 +24,8 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 class BillingEventConsumerTest {
@@ -120,6 +122,87 @@ class BillingEventConsumerTest {
                 event.eventType().equals("orcamentoGerado")
                         && event.topic().equals("oficina.billing.orcamento-gerado")
                         && event.payload().get("valorTotal").equals(new BigDecimal("400.00"))));
+    }
+
+    @Test
+    void deveReutilizarOrcamentoEOutboxAoRetentarNotificacao() {
+        var ordemServicoId = UUID.randomUUID();
+        var eventId = UUID.randomUUID();
+        var notificationAttempts = new AtomicInteger();
+        var useCase = new GerarOrcamentoUseCase(
+                orcamentoRepository,
+                store,
+                store,
+                ignored -> notificationAttempts.getAndIncrement() == 0
+                        ? java.util.concurrent.CompletableFuture.failedFuture(
+                                new IllegalStateException("notificacao indisponivel"))
+                        : java.util.concurrent.CompletableFuture.completedFuture(null));
+        var retryingConsumer = new BillingEventConsumer(
+                store,
+                useCase,
+                new SolicitarPagamentoDaOrdemUseCase(
+                        orcamentoRepository, pagamentoRepository, registrarPagamentoUseCase),
+                new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
+        var evento = envelope(eventId, "diagnosticoFinalizado", ordemServicoId, Map.of(
+                "ordemServicoId", ordemServicoId.toString(),
+                "pecas", List.of(),
+                "servicos", List.of()));
+
+        assertThrows(CompletionException.class, () -> retryingConsumer.consumir(evento));
+        assertEquals(1, orcamentoRepository.findByOrdemServicoId(ordemServicoId).join().size());
+        assertEquals(1, store.listarOutbox().stream()
+                .filter(outbox -> outbox.eventType().equals("orcamentoGerado"))
+                .count());
+
+        assertTrue(retryingConsumer.consumir(evento));
+        assertFalse(retryingConsumer.consumir(evento));
+
+        assertEquals(2, notificationAttempts.get());
+        assertEquals(1, orcamentoRepository.findByOrdemServicoId(ordemServicoId).join().size());
+        assertEquals(1, store.listarOutbox().stream()
+                .filter(outbox -> outbox.eventType().equals("orcamentoGerado"))
+                .count());
+    }
+
+    @Test
+    void naoDeveRegredirNemRenotificarOrcamentoJaAprovadoDuranteRetentativa() {
+        var ordemServicoId = UUID.randomUUID();
+        var eventId = UUID.randomUUID();
+        var notificationAttempts = new AtomicInteger();
+        var useCase = new GerarOrcamentoUseCase(
+                orcamentoRepository,
+                store,
+                store,
+                ignored -> {
+                    notificationAttempts.incrementAndGet();
+                    return java.util.concurrent.CompletableFuture.failedFuture(
+                            new IllegalStateException("notificacao indisponivel"));
+                });
+        var retryingConsumer = new BillingEventConsumer(
+                store,
+                useCase,
+                new SolicitarPagamentoDaOrdemUseCase(
+                        orcamentoRepository, pagamentoRepository, registrarPagamentoUseCase),
+                new CancelarPagamentosCriadosDaOrdemUseCase(pagamentoRepository));
+        var evento = envelope(eventId, "diagnosticoFinalizado", ordemServicoId, Map.of(
+                "ordemServicoId", ordemServicoId.toString(),
+                "pecas", List.of(),
+                "servicos", List.of()));
+
+        assertThrows(CompletionException.class, () -> retryingConsumer.consumir(evento));
+        var orcamento = orcamentoRepository.findByOrdemServicoId(ordemServicoId).join().getFirst();
+        aprovarOrcamentoUseCase.executar(
+                new AprovarOrcamentoUseCase.Command(orcamento.orcamentoId(), "Aprovado antes da retentativa")).join();
+
+        assertTrue(retryingConsumer.consumir(evento));
+
+        var preservado = orcamentoRepository.findById(orcamento.orcamentoId()).join().orElseThrow();
+        assertEquals(StatusOrcamento.APROVADO, preservado.status());
+        assertEquals(1, notificationAttempts.get());
+        assertEquals(1, orcamentoRepository.findByOrdemServicoId(ordemServicoId).join().size());
+        assertEquals(1, store.listarOutbox().stream()
+                .filter(outbox -> outbox.eventType().equals("orcamentoGerado"))
+                .count());
     }
 
     @Test

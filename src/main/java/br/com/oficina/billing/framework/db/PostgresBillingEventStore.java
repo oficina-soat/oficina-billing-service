@@ -463,7 +463,38 @@ public class PostgresBillingEventStore implements BillingEventStore {
         return CompletableFuture.completedFuture(null);
     }
 
+    @Override
+    public CompletableFuture<Void> registrarOutboxIdempotente(
+            UUID eventId,
+            String aggregateId,
+            String eventType,
+            String topic,
+            Map<String, Object> payload,
+            String correlationId,
+            OffsetDateTime occurredAt) {
+        metrics.persistence(
+                DATABASE,
+                OUTBOX,
+                INSERT,
+                () -> registrarOutboxBlocking(
+                        eventId, true, aggregateId, eventType, topic, payload, correlationId, occurredAt));
+        return CompletableFuture.completedFuture(null);
+    }
+
     private OutboxEventRecord registrarOutboxBlocking(
+            String aggregateId,
+            String eventType,
+            String topic,
+            Map<String, Object> payload,
+            String correlationId,
+            OffsetDateTime occurredAt) {
+        return registrarOutboxBlocking(
+                UUID.randomUUID(), false, aggregateId, eventType, topic, payload, correlationId, occurredAt);
+    }
+
+    private OutboxEventRecord registrarOutboxBlocking(
+            UUID eventId,
+            boolean idempotent,
             String aggregateId,
             String eventType,
             String topic,
@@ -472,7 +503,7 @@ public class PostgresBillingEventStore implements BillingEventStore {
             OffsetDateTime occurredAt) {
         var now = OffsetDateTime.now(ZoneOffset.UTC);
         var event = new OutboxEventRecord(
-                UUID.randomUUID(),
+                eventId,
                 aggregateId,
                 eventType,
                 1,
@@ -486,8 +517,9 @@ public class PostgresBillingEventStore implements BillingEventStore {
                 null,
                 0,
                 null);
+        var insert = idempotent ? INSERT_OUTBOX + " ON CONFLICT (id) DO NOTHING" : INSERT_OUTBOX;
         try (var connection = dataSource.getConnection();
-                var statement = connection.prepareStatement(INSERT_OUTBOX)) {
+                var statement = connection.prepareStatement(insert)) {
             statement.setObject(1, event.eventId());
             statement.setString(2, event.aggregateId());
             statement.setString(3, event.eventType());
@@ -502,8 +534,9 @@ public class PostgresBillingEventStore implements BillingEventStore {
             statement.setObject(12, event.publishedAt());
             statement.setInt(13, event.attempts());
             statement.setString(14, event.lastError());
-            statement.executeUpdate();
-            logEvent("outbox event registered", event, STATUS_PENDING);
+            if (statement.executeUpdate() > 0) {
+                logEvent("outbox event registered", event, STATUS_PENDING);
+            }
             return event;
         } catch (SQLException exception) {
             throw persistenceFailure(exception);

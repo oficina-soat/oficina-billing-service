@@ -2,6 +2,7 @@ package br.com.oficina.billing.core.interfaces.sender;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public interface OutboxEventSender {
@@ -12,4 +13,15 @@ public interface OutboxEventSender {
             Map<String, Object> payload,
             String correlationId,
             OffsetDateTime occurredAt);
+
+    default CompletableFuture<Void> registrarOutboxIdempotente(
+            UUID eventId,
+            String aggregateId,
+            String eventType,
+            String topic,
+            Map<String, Object> payload,
+            String correlationId,
+            OffsetDateTime occurredAt) {
+        return registrarOutbox(aggregateId, eventType, topic, payload, correlationId, occurredAt);
+    }
 }

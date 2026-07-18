@@ -9,6 +9,7 @@ import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway
 import br.com.oficina.billing.core.interfaces.sender.OutboxEventSender;
 import br.com.oficina.billing.core.interfaces.sender.OrcamentoApprovalSender;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -52,6 +53,17 @@ public class GerarOrcamentoUseCase {
 
     public CompletableFuture<Orcamento> executar(Command command) {
         var now = OffsetDateTime.now(clock);
+        if (command.sourceEventId() != null) {
+            var orcamentoId = deterministicId("orcamento", command.sourceEventId());
+            return repository.findById(orcamentoId)
+                    .thenCompose(existing -> existing
+                            .map(orcamento -> concluirProcessamentoDoEvento(orcamento, command, orcamento.criadoEm()))
+                            .orElseGet(() -> criarOrcamento(command, orcamentoId, now)));
+        }
+        return criarOrcamento(command, UUID.randomUUID(), now);
+    }
+
+    private CompletableFuture<Orcamento> criarOrcamento(Command command, UUID orcamentoId, OffsetDateTime now) {
         return financeiroSnapshotGateway.snapshotFinanceiro(command.ordemServicoId())
                 .thenCompose(snapshot -> {
                     var itens = snapshot.isEmpty() ? snapshotInicial() : snapshot;
@@ -59,7 +71,7 @@ public class GerarOrcamentoUseCase {
                             .map(ItemOrcamento::valorTotal)
                             .reduce(BigDecimal.ZERO, BigDecimal::add);
                     var orcamento = new Orcamento(
-                            UUID.randomUUID(),
+                            orcamentoId,
                             command.ordemServicoId(),
                             itens,
                             valorTotal,
@@ -68,16 +80,42 @@ public class GerarOrcamentoUseCase {
                             now);
                     return repository.save(orcamento);
                 })
-                .thenCompose(salvo -> OrcamentoEventPayloads.registrarEvento(
+                .thenCompose(salvo -> concluirProcessamentoDoEvento(salvo, command, now));
+    }
+
+    private CompletableFuture<Orcamento> concluirProcessamentoDoEvento(
+            Orcamento orcamento,
+            Command command,
+            OffsetDateTime ocorridoEm) {
+        var outbox = command.sourceEventId() == null
+                ? OrcamentoEventPayloads.registrarEvento(
                         outboxEventSender,
-                        salvo,
+                        orcamento,
                         "orcamentoGerado",
                         "oficina.billing.orcamento-gerado",
                         "geradoEm",
-                        now,
-                        command.correlationId())
-                        .thenCompose(ignored -> approvalSender.enviar(salvo))
-                        .thenApply(ignored -> salvo));
+                        ocorridoEm,
+                        null)
+                : OrcamentoEventPayloads.registrarEventoIdempotente(
+                        outboxEventSender,
+                        deterministicId("orcamentoGerado", command.sourceEventId()),
+                        orcamento,
+                        "orcamentoGerado",
+                        "oficina.billing.orcamento-gerado",
+                        "geradoEm",
+                        ocorridoEm,
+                        command.correlationId());
+        return outbox
+                .thenCompose(ignored -> orcamento.status() == StatusOrcamento.GERADO
+                        ? approvalSender.enviar(orcamento)
+                        : CompletableFuture.completedFuture(null))
+                .thenApply(ignored -> orcamento);
+    }
+
+    private UUID deterministicId(String purpose, UUID sourceEventId) {
+        return UUID.nameUUIDFromBytes(
+                ("diagnosticoFinalizado:" + purpose + ":" + sourceEventId)
+                        .getBytes(StandardCharsets.UTF_8));
     }
 
     private List<ItemOrcamento> snapshotInicial() {
@@ -91,9 +129,13 @@ public class GerarOrcamentoUseCase {
                 BigDecimal.ZERO));
     }
 
-    public record Command(UUID ordemServicoId, String correlationId) {
+    public record Command(UUID ordemServicoId, String correlationId, UUID sourceEventId) {
         public Command(UUID ordemServicoId) {
-            this(ordemServicoId, null);
+            this(ordemServicoId, null, null);
+        }
+
+        public Command(UUID ordemServicoId, String correlationId) {
+            this(ordemServicoId, correlationId, null);
         }
     }
 }

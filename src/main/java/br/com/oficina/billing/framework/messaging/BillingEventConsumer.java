@@ -69,7 +69,7 @@ public class BillingEventConsumer {
             case "diagnosticoFinalizado" -> {
                 registrarDiagnostico(envelope);
                 gerarOrcamentoUseCase.executar(new GerarOrcamentoUseCase.Command(
-                        ordemServicoId(envelope), correlationId(envelope))).join();
+                        ordemServicoId(envelope), correlationId(envelope), envelope.eventId())).join();
             }
             case "ordemDeServicoFinalizada", "execucaoFinalizada" ->
                     solicitarPagamentoDaOrdemUseCase.executar(

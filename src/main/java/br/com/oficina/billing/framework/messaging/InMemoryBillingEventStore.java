@@ -112,7 +112,34 @@ public class InMemoryBillingEventStore implements BillingEventStore {
         return CompletableFuture.completedFuture(null);
     }
 
+    @Override
+    public synchronized CompletableFuture<Void> registrarOutboxIdempotente(
+            UUID eventId,
+            String aggregateId,
+            String eventType,
+            String topic,
+            Map<String, Object> payload,
+            String correlationId,
+            OffsetDateTime occurredAt) {
+        if (!outboxEvents.containsKey(eventId)) {
+            registrarOutboxRecord(eventId, aggregateId, eventType, topic, payload, correlationId, occurredAt);
+        }
+        return CompletableFuture.completedFuture(null);
+    }
+
     private synchronized OutboxEventRecord registrarOutboxRecord(
+            String aggregateId,
+            String eventType,
+            String topic,
+            Map<String, Object> payload,
+            String correlationId,
+            OffsetDateTime occurredAt) {
+        return registrarOutboxRecord(
+                UUID.randomUUID(), aggregateId, eventType, topic, payload, correlationId, occurredAt);
+    }
+
+    private synchronized OutboxEventRecord registrarOutboxRecord(
+            UUID eventId,
             String aggregateId,
             String eventType,
             String topic,
@@ -122,7 +149,7 @@ public class InMemoryBillingEventStore implements BillingEventStore {
         var now = OffsetDateTime.now(ZoneOffset.UTC);
         var effectiveCorrelationId = correlationId(correlationId);
         var event = new OutboxEventRecord(
-                UUID.randomUUID(),
+                eventId,
                 aggregateId,
                 eventType,
                 1,
