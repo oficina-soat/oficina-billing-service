@@ -8,6 +8,7 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -65,7 +66,8 @@ public class MercadoPagoWebhookSignatureValidator {
         if (expired(timestamp)) {
             return reject("timestamp_expired");
         }
-        var manifest = "id:" + dataId + ";request-id:" + requestId + ";ts:" + timestamp + ";";
+        var manifestDataId = dataId.toLowerCase(Locale.ROOT);
+        var manifest = "id:" + manifestDataId + ";request-id:" + requestId + ";ts:" + timestamp + ";";
         var expectedHash = hmac(manifest);
         var valid = MessageDigest.isEqual(
                 expectedHash.getBytes(StandardCharsets.US_ASCII),
