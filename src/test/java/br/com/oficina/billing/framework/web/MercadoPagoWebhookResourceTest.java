@@ -69,7 +69,7 @@ class MercadoPagoWebhookResourceTest {
     void deveUsarIdentificadorETipoDoCorpo() {
         var controller = mock(PagamentoController.class);
         var validator = mock(MercadoPagoWebhookSignatureValidator.class);
-        when(validator.isValid("signature", "request-1", "123456")).thenReturn(true);
+        when(validator.isValid("signature", "request-1", (String) null)).thenReturn(true);
         when(controller.reconciliarPagamentoPorTransacao(
                         "123456",
                         TipoReferenciaExternaPagamento.PAYMENT))
@@ -91,7 +91,7 @@ class MercadoPagoWebhookResourceTest {
     void deveReconhecerReferenciaAssinadaDesconhecidaSemExporExistencia() {
         var controller = mock(PagamentoController.class);
         var validator = mock(MercadoPagoWebhookSignatureValidator.class);
-        when(validator.isValid("signature", "request-1", "123456")).thenReturn(true);
+        when(validator.isValid("signature", "request-1", (String) null)).thenReturn(true);
         when(controller.reconciliarPagamentoPorTransacao(
                         "123456",
                         TipoReferenciaExternaPagamento.PAYMENT))
@@ -143,7 +143,7 @@ class MercadoPagoWebhookResourceTest {
     void deveIgnorarTipoNaoFinanceiroDepoisDeValidarAssinatura() {
         var controller = mock(PagamentoController.class);
         var validator = mock(MercadoPagoWebhookSignatureValidator.class);
-        when(validator.isValid("signature", "request-1", "123456")).thenReturn(true);
+        when(validator.isValid("signature", "request-1", (String) null)).thenReturn(true);
         var resource = new MercadoPagoWebhookResource(controller, validator);
         var request = new MercadoPagoWebhookResource.WebhookRequest(
                 "merchant_order", new MercadoPagoWebhookResource.WebhookRequest.Data("123456"));
