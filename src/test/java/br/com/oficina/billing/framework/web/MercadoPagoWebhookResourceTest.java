@@ -69,7 +69,7 @@ class MercadoPagoWebhookResourceTest {
     void deveUsarIdentificadorETipoDoCorpo() {
         var controller = mock(PagamentoController.class);
         var validator = mock(MercadoPagoWebhookSignatureValidator.class);
-        when(validator.isValid("signature", "request-1", (String) null)).thenReturn(true);
+        when(validator.isValid("signature", "request-1", "123456")).thenReturn(true);
         when(controller.reconciliarPagamentoPorTransacao(
                         "123456",
                         TipoReferenciaExternaPagamento.PAYMENT))
@@ -91,7 +91,7 @@ class MercadoPagoWebhookResourceTest {
     void deveReconhecerReferenciaAssinadaDesconhecidaSemExporExistencia() {
         var controller = mock(PagamentoController.class);
         var validator = mock(MercadoPagoWebhookSignatureValidator.class);
-        when(validator.isValid("signature", "request-1", (String) null)).thenReturn(true);
+        when(validator.isValid("signature", "request-1", "123456")).thenReturn(true);
         when(controller.reconciliarPagamentoPorTransacao(
                         "123456",
                         TipoReferenciaExternaPagamento.PAYMENT))
@@ -143,7 +143,7 @@ class MercadoPagoWebhookResourceTest {
     void deveIgnorarTipoNaoFinanceiroDepoisDeValidarAssinatura() {
         var controller = mock(PagamentoController.class);
         var validator = mock(MercadoPagoWebhookSignatureValidator.class);
-        when(validator.isValid("signature", "request-1", (String) null)).thenReturn(true);
+        when(validator.isValid("signature", "request-1", "123456")).thenReturn(true);
         var resource = new MercadoPagoWebhookResource(controller, validator);
         var request = new MercadoPagoWebhookResource.WebhookRequest(
                 "merchant_order", new MercadoPagoWebhookResource.WebhookRequest.Data("123456"));
@@ -170,28 +170,29 @@ class MercadoPagoWebhookResourceTest {
     void deveReconciliarOrderEValidarCoerenciaDeTipoEAction() {
         var controller = mock(PagamentoController.class);
         var validator = mock(MercadoPagoWebhookSignatureValidator.class);
-        when(validator.isValid("signature", "request-1", "order-123")).thenReturn(true);
+        var orderId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        when(validator.isValid("signature", "request-1", orderId)).thenReturn(true);
         when(controller.reconciliarPagamentoPorTransacao(
-                        "order-123",
+                        orderId,
                         TipoReferenciaExternaPagamento.ORDER))
                 .thenReturn(CompletableFuture.completedFuture(mock(Pagamento.class)));
         var resource = new MercadoPagoWebhookResource(controller, validator);
         var request = new MercadoPagoWebhookResource.WebhookRequest(
                 "order.action_required",
                 "order",
-                new MercadoPagoWebhookResource.WebhookRequest.Data("order-123"));
+                new MercadoPagoWebhookResource.WebhookRequest.Data(orderId));
 
         var response = resource.receber(
                         "signature",
                         "request-1",
-                        "order-123",
-                        "order",
+                        null,
+                        null,
                         request)
                 .await().indefinitely();
 
         assertEquals(200, response.getStatus());
         verify(controller).reconciliarPagamentoPorTransacao(
-                "order-123",
+                orderId,
                 TipoReferenciaExternaPagamento.ORDER);
 
         assertThrows(
@@ -199,7 +200,7 @@ class MercadoPagoWebhookResourceTest {
                 () -> resource.receber(
                         "signature",
                         "request-1",
-                        "order-123",
+                        orderId,
                         "payment",
                         request));
         assertThrows(
@@ -207,7 +208,7 @@ class MercadoPagoWebhookResourceTest {
                 () -> resource.receber(
                         "signature",
                         "request-1",
-                        "order-123",
+                        orderId,
                         "order",
                         new MercadoPagoWebhookResource.WebhookRequest(
                                 "payment.updated",
