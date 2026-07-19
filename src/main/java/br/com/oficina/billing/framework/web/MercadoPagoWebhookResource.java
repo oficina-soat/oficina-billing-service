@@ -2,8 +2,9 @@ package br.com.oficina.billing.framework.web;
 
 import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
 
-import br.com.oficina.billing.framework.payments.MercadoPagoWebhookSignatureValidator;
 import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
+import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
+import br.com.oficina.billing.framework.payments.MercadoPagoWebhookSignatureValidator;
 import br.com.oficina.billing.interfaces.controllers.PagamentoController;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
@@ -54,7 +55,9 @@ public class MercadoPagoWebhookResource {
         return toUni(() -> pagamentoController.reconciliarPagamentoPorTransacao(
                         dataId,
                         tipoReferenciaExterna)
-                .thenApply(ignored -> Response.ok().build()));
+                .thenApply(ignored -> Response.ok().build()))
+                .onFailure(ResourceNotFoundException.class)
+                .recoverWithItem(Response.ok().build());
     }
 
     private String dataId(String queryDataId, WebhookRequest request) {
