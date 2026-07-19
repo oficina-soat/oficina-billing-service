@@ -3,6 +3,7 @@ package br.com.oficina.billing.framework.web;
 import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
 
 import br.com.oficina.billing.framework.payments.MercadoPagoWebhookSignatureValidator;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.interfaces.controllers.PagamentoController;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
@@ -45,11 +46,15 @@ public class MercadoPagoWebhookResource {
         if (!signatureValidator.isValid(signature, requestId, dataId)) {
             throw new NotAuthorizedException("Assinatura invalida do webhook do Mercado Pago.");
         }
-        if (!isPayment(queryType, request)) {
-            return Uni.createFrom().item(Response.noContent().build());
+        var tipoReferenciaExterna = tipoReferenciaExterna(queryType, request);
+        if (tipoReferenciaExterna == null) {
+            return Uni.createFrom().item(Response.ok().build());
         }
-        return toUni(() -> pagamentoController.reconciliarPagamentoPorTransacao(dataId)
-                .thenApply(ignored -> Response.noContent().build()));
+        validarAction(request, tipoReferenciaExterna);
+        return toUni(() -> pagamentoController.reconciliarPagamentoPorTransacao(
+                        dataId,
+                        tipoReferenciaExterna)
+                .thenApply(ignored -> Response.ok().build()));
     }
 
     private String dataId(String queryDataId, WebhookRequest request) {
@@ -64,13 +69,47 @@ public class MercadoPagoWebhookResource {
         return dataId;
     }
 
-    private boolean isPayment(String queryType, WebhookRequest request) {
+    private TipoReferenciaExternaPagamento tipoReferenciaExterna(
+            String queryType,
+            WebhookRequest request) {
         var bodyType = request == null ? null : request.type();
+        if (queryType != null
+                && !queryType.isBlank()
+                && bodyType != null
+                && !bodyType.isBlank()
+                && !queryType.equalsIgnoreCase(bodyType)) {
+            throw new BadRequestException("Tipos divergentes no webhook.");
+        }
         var type = queryType == null || queryType.isBlank() ? bodyType : queryType;
-        return type == null || type.isBlank() || "payment".equalsIgnoreCase(type);
+        if ("order".equalsIgnoreCase(type)) {
+            return TipoReferenciaExternaPagamento.ORDER;
+        }
+        if ("payment".equalsIgnoreCase(type)) {
+            return TipoReferenciaExternaPagamento.PAYMENT;
+        }
+        return null;
     }
 
-    public record WebhookRequest(String type, Data data) {
+    private void validarAction(
+            WebhookRequest request,
+            TipoReferenciaExternaPagamento tipoReferenciaExterna) {
+        var action = request == null ? null : request.action();
+        if (action == null || action.isBlank()) {
+            return;
+        }
+        var prefix = tipoReferenciaExterna == TipoReferenciaExternaPagamento.ORDER
+                ? "order."
+                : "payment.";
+        if (!action.toLowerCase(java.util.Locale.ROOT).startsWith(prefix)) {
+            throw new BadRequestException("Action divergente do tipo no webhook.");
+        }
+    }
+
+    public record WebhookRequest(String action, String type, Data data) {
+        public WebhookRequest(String type, Data data) {
+            this(null, type, data);
+        }
+
         public record Data(String id) {
         }
     }

@@ -1,6 +1,7 @@
 package br.com.oficina.billing.core.interfaces.gateway;
 
 import br.com.oficina.billing.core.entities.Pagamento;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -23,6 +24,14 @@ public interface PagamentoRepositoryGateway {
     CompletableFuture<Optional<Pagamento>> findById(UUID pagamentoId);
 
     CompletableFuture<Optional<Pagamento>> findByTransacaoExternaId(String transacaoExternaId);
+
+    default CompletableFuture<Optional<Pagamento>> findByTransacaoExternaId(
+            String transacaoExternaId,
+            TipoReferenciaExternaPagamento tipoReferenciaExterna) {
+        return findByTransacaoExternaId(transacaoExternaId)
+                .thenApply(optional -> optional.filter(
+                        pagamento -> pagamento.tipoReferenciaExterna() == tipoReferenciaExterna));
+    }
 
     CompletableFuture<List<Pagamento>> findByOrdemServicoId(UUID ordemServicoId);
 

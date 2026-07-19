@@ -33,6 +33,13 @@ public class MercadoPagoMetrics {
     private static final String TAG_METHOD = "method";
     private static final String TAG_OUTCOME = "outcome";
     private static final Set<String> PROVIDER_STATUSES = Set.of(
+            "created",
+            "processing",
+            "action_required",
+            "processed",
+            "failed",
+            "canceled",
+            "expired",
             "approved",
             "rejected",
             "cancelled",

@@ -3,6 +3,7 @@ package br.com.oficina.billing.core.usecases.pagamento;
 import br.com.oficina.billing.core.entities.InstrucoesPix;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoGateway;
@@ -46,7 +47,15 @@ public class ReconciliarPagamentoUseCase {
     }
 
     public CompletableFuture<Pagamento> executarPorTransacaoExternaId(String transacaoExternaId) {
-        return repository.findByTransacaoExternaId(transacaoExternaId)
+        return executarPorTransacaoExternaId(
+                transacaoExternaId,
+                TipoReferenciaExternaPagamento.PAYMENT);
+    }
+
+    public CompletableFuture<Pagamento> executarPorTransacaoExternaId(
+            String transacaoExternaId,
+            TipoReferenciaExternaPagamento tipoReferenciaExterna) {
+        return repository.findByTransacaoExternaId(transacaoExternaId, tipoReferenciaExterna)
                 .thenCompose(optional -> reconciliar(optional.orElseThrow(() ->
                         new ResourceNotFoundException("Pagamento do Mercado Pago nao encontrado."))));
     }
@@ -78,6 +87,7 @@ public class ReconciliarPagamentoUseCase {
                 resultado.status(),
                 resultado.provedor(),
                 resultado.transacaoExternaId(),
+                resultado.tipoReferenciaExterna(),
                 instrucoes(resultado.instrucoesPix(), pagamento.instrucoesPix()),
                 pagamento.criadoEm(),
                 OffsetDateTime.now(clock));
@@ -89,7 +99,8 @@ public class ReconciliarPagamentoUseCase {
         if (resultado == null
                 || !resultado.integrado()
                 || !pagamento.provedor().equals(resultado.provedor())
-                || !pagamento.transacaoExternaId().equals(resultado.transacaoExternaId())) {
+                || !pagamento.transacaoExternaId().equals(resultado.transacaoExternaId())
+                || pagamento.tipoReferenciaExterna() != resultado.tipoReferenciaExterna()) {
             throw new BusinessException(
                     "DEPENDENCY_FAILURE",
                     "Resposta de reconciliacao inconsistente com o pagamento registrado.");

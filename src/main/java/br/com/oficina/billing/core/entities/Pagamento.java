@@ -14,6 +14,7 @@ public record Pagamento(
         StatusPagamento status,
         String provedor,
         String transacaoExternaId,
+        TipoReferenciaExternaPagamento tipoReferenciaExterna,
         InstrucoesPix instrucoesPix,
         OffsetDateTime criadoEm,
         OffsetDateTime atualizadoEm) {
@@ -37,9 +38,47 @@ public record Pagamento(
                 status,
                 provedor,
                 transacaoExternaId,
+                tipoReferenciaExterna(provedor, transacaoExternaId),
                 null,
                 criadoEm,
                 atualizadoEm);
+    }
+
+    public Pagamento(
+            UUID pagamentoId,
+            UUID ordemServicoId,
+            UUID orcamentoId,
+            BigDecimal valor,
+            MetodoPagamento metodo,
+            StatusPagamento status,
+            String provedor,
+            String transacaoExternaId,
+            InstrucoesPix instrucoesPix,
+            OffsetDateTime criadoEm,
+            OffsetDateTime atualizadoEm) {
+        this(
+                pagamentoId,
+                ordemServicoId,
+                orcamentoId,
+                valor,
+                metodo,
+                status,
+                provedor,
+                transacaoExternaId,
+                tipoReferenciaExterna(provedor, transacaoExternaId),
+                instrucoesPix,
+                criadoEm,
+                atualizadoEm);
+    }
+
+    private static TipoReferenciaExternaPagamento tipoReferenciaExterna(
+            String provedor,
+            String transacaoExternaId) {
+        return "mercado-pago".equalsIgnoreCase(provedor)
+                        && transacaoExternaId != null
+                        && !transacaoExternaId.isBlank()
+                ? TipoReferenciaExternaPagamento.PAYMENT
+                : null;
     }
 
     public List<AcaoPermitidaPagamento> acoesPermitidas() {

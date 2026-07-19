@@ -132,7 +132,8 @@ O serviço considera o runtime protegido quando o profile Quarkus ativo é `prod
 - mensageria, publisher, consumer ou worker desabilitado;
 - ausência de `AWS_REGION`, credenciais AWS estáticas parciais ou uso de `OFICINA_MESSAGING_ENDPOINT_OVERRIDE`;
 - uso de valores `PLACEHOLDER` nas configurações obrigatórias;
-- `OFICINA_MERCADO_PAGO_ENABLED=true` sem `OFICINA_MERCADO_PAGO_ACCESS_TOKEN`.
+- `OFICINA_MERCADO_PAGO_ENABLED=true` sem Access Token, secret do webhook, e-mail pagador, URL ou modo `orders|payments` válidos;
+- `OFICINA_MERCADO_PAGO_PAYER_FIRST_NAME=APRO` fora de `lab`/`test` ou sem o e-mail oficial de teste.
 
 As credenciais AWS podem vir da cadeia padrão do SDK, incluindo IAM Role/IRSA. Quando configuradas estaticamente, informe `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY`; inclua também `AWS_SESSION_TOKEN` para credenciais temporárias. Após validar a configuração, o startup confirma a conexão PostgreSQL, todos os tópicos SNS produzidos e todas as filas SQS consumidas. LocalStack e persistência em memória continuam disponíveis somente para testes e execução local explícita.
 
@@ -233,15 +234,22 @@ Ao consumir `ordemDeServicoCriada`, o serviço também projeta localmente o e-ma
 
 ## Integração Mercado Pago
 
-A integração com Mercado Pago é opcional e fica desabilitada por padrão. Quando `OFICINA_MERCADO_PAGO_ENABLED=true`, o Access Token passa a ser obrigatório já na inicialização e o registro de pagamento PIX em `POST /api/v1/pagamentos` cria uma cobrança no endpoint `/v1/payments` do Mercado Pago usando `Authorization: Bearer` e `X-Idempotency-Key` com o `pagamentoId`.
+A integração com Mercado Pago é opcional e fica desabilitada por padrão. Quando `OFICINA_MERCADO_PAGO_ENABLED=true`, o Access Token e o secret do webhook passam a ser obrigatórios já na inicialização. O registro de pagamento PIX em `POST /api/v1/pagamentos` cria por padrão uma order em `/v1/orders`, com `type=online`, `processing_mode=automatic`, uma única transação PIX e o `pagamentoId` em `external_reference` e `X-Idempotency-Key`.
+
+`OFICINA_MERCADO_PAGO_API_MODE=orders` é o modo canônico. O valor temporário `payments` permite rollback apenas da criação; a migration V9 classifica referências existentes como `PAYMENT`, enquanto novas orders são persistidas como `ORDER`. Consultas e webhooks usam esse tipo persistido, nunca o formato de `transacaoExternaId`, de modo que orders já criadas continuam reconciliáveis mesmo se a criação voltar temporariamente para Payments.
+
+No `lab`, o cenário automático usa `OFICINA_MERCADO_PAGO_PAYER_EMAIL=test_user_br@testuser.com` e `OFICINA_MERCADO_PAGO_PAYER_FIRST_NAME=APRO`. O startup rejeita `APRO` fora de `lab` ou `test`; produção não pode conter esse marcador.
 
 Antes da chamada externa, o Billing reivindica no PostgreSQL um claim com lease por `orcamentoId`. Somente o proprietário chama o provedor; consumidores concorrentes aguardam o pagamento persistido e reutilizam a mesma Outbox idempotente. Falha do proprietário libera o claim para takeover por outro consumidor, mas continua retentável quando não existe concorrente que conclua o pagamento. Os timeouts padrão de conexão e leitura são, respectivamente, 3 e 10 segundos, inferiores ao lease de 30 segundos.
 
-Mapeamento de status do provedor:
+Mapeamento de status de Orders:
 
-- `approved`: pagamento local `CONFIRMADO` e evento `pagamentoConfirmado`;
-- `rejected`, `cancelled`, `refunded` ou `charged_back`: pagamento local `RECUSADO` e evento `pagamentoRecusado`;
-- demais estados, como `pending` e `in_process`: pagamento local permanece `CRIADO` com `provedor=mercado-pago` e `transacaoExternaId`.
+- `created`, `processing` e `action_required/waiting_payment|waiting_transfer`: pagamento local `CRIADO`;
+- `processed/accredited`: pagamento local `CONFIRMADO` e evento `pagamentoConfirmado`;
+- `failed`, `canceled`, `expired`, `refunded` ou `charged_back`: pagamento local `RECUSADO` e evento `pagamentoRecusado`;
+- combinações contraditórias ou desconhecidas: falha de dependência sem transição local.
+
+Payments legados preservam a tradução `approved` para `CONFIRMADO`, estados terminais negativos para `RECUSADO` e demais estados para `CRIADO`. O webhook aceita `type=order` e, durante a compatibilidade, `type=payment`, valida HMAC com o `x-request-id` original, consulta o recurso externo e retorna `200` após processamento idempotente.
 
 A integração atual com o Mercado Pago cobre PIX. Cartão exige tokenização ou dados de captura fora do contrato REST vigente e permanece como evolução posterior ou fluxo operacional manual.
 
@@ -268,7 +276,10 @@ As tentativas de integração expõem as métricas `payment.provider.enabled`, `
 - `MP_JWT_VERIFY_PUBLICKEY_LOCATION`
 - `OFICINA_MERCADO_PAGO_ENABLED`
 - `OFICINA_MERCADO_PAGO_ACCESS_TOKEN`
+- `OFICINA_MERCADO_PAGO_WEBHOOK_SECRET`
+- `OFICINA_MERCADO_PAGO_API_MODE`
 - `OFICINA_MERCADO_PAGO_PAYER_EMAIL`
+- `OFICINA_MERCADO_PAGO_PAYER_FIRST_NAME`
 - `OFICINA_MERCADO_PAGO_API_URL`
 - `OFICINA_APPROVAL_NOTIFICATIONS_ENABLED`
 - `OFICINA_PUBLIC_API_URL`
