@@ -48,9 +48,6 @@ public class MercadoPagoWebhookSignatureValidator {
         if (requestId == null || requestId.isBlank()) {
             return reject("request_id_missing");
         }
-        if (dataId == null || dataId.isBlank()) {
-            return reject("data_id_missing");
-        }
         if (signature == null || signature.isBlank()) {
             return reject("signature_missing");
         }
@@ -66,9 +63,18 @@ public class MercadoPagoWebhookSignatureValidator {
         if (expired(timestamp)) {
             return reject("timestamp_expired");
         }
-        var manifestDataId = dataId.toLowerCase(Locale.ROOT);
-        var manifest = "id:" + manifestDataId + ";request-id:" + requestId + ";ts:" + timestamp + ";";
-        var expectedHash = hmac(manifest);
+        var manifest = new StringBuilder();
+        if (dataId != null && !dataId.isBlank()) {
+            manifest.append("id:")
+                    .append(dataId.toLowerCase(Locale.ROOT))
+                    .append(';');
+        }
+        manifest.append("request-id:")
+                .append(requestId)
+                .append(";ts:")
+                .append(timestamp)
+                .append(';');
+        var expectedHash = hmac(manifest.toString());
         var valid = MessageDigest.isEqual(
                 expectedHash.getBytes(StandardCharsets.US_ASCII),
                 suppliedHash.getBytes(StandardCharsets.US_ASCII));

@@ -46,6 +46,17 @@ class MercadoPagoWebhookSignatureValidatorTest {
     }
 
     @Test
+    void deveValidarManifestoSemDataIdQuandoQueryNaoFoiEnviada() throws Exception {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
+        var requestId = "request-without-query-data-id";
+        var signature = "ts=" + TIMESTAMP + ",v1=" + signature(null, requestId);
+
+        assertTrue(validator.isValid(signature, requestId, null));
+        assertTrue(validator.isValid(signature, requestId, " "));
+        assertFalse(validator.isValid(signature, requestId, "body-id-nao-pertence-ao-manifesto"));
+    }
+
+    @Test
     void deveRejeitarAssinaturaExpiradaOuConfiguracaoAusente() throws Exception {
         var expired = new MercadoPagoWebhookSignatureValidator(SECRET, 10, CLOCK);
         var dataId = "123456";
@@ -77,8 +88,6 @@ class MercadoPagoWebhookSignatureValidatorTest {
                 .isValid("signature", "request-1", "123456"));
         assertFalse(validator.isValid("signature", null, "123456"));
         assertFalse(validator.isValid("signature", " ", "123456"));
-        assertFalse(validator.isValid("signature", "request-1", null));
-        assertFalse(validator.isValid("signature", "request-1", " "));
     }
 
     @Test
@@ -111,9 +120,13 @@ class MercadoPagoWebhookSignatureValidatorTest {
     }
 
     private String signature(String dataId, String requestId, long timestamp) throws Exception {
-        var manifest = "id:" + dataId + ";request-id:" + requestId + ";ts:" + timestamp + ";";
+        var manifest = new StringBuilder();
+        if (dataId != null && !dataId.isBlank()) {
+            manifest.append("id:").append(dataId).append(';');
+        }
+        manifest.append("request-id:").append(requestId).append(";ts:").append(timestamp).append(';');
         var mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-        return HexFormat.of().formatHex(mac.doFinal(manifest.getBytes(StandardCharsets.UTF_8)));
+        return HexFormat.of().formatHex(mac.doFinal(manifest.toString().getBytes(StandardCharsets.UTF_8)));
     }
 }
