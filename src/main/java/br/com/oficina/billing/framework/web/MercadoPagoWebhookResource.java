@@ -44,7 +44,7 @@ public class MercadoPagoWebhookResource {
             @QueryParam("type") String queryType,
             WebhookRequest request) {
         var dataId = dataId(queryDataId, request);
-        if (!signatureValidator.isValid(signature, requestId, queryDataId)) {
+        if (!signatureValidator.isValid(signature, requestId, dataId)) {
             throw new NotAuthorizedException("Assinatura invalida do webhook do Mercado Pago.");
         }
         var tipoReferenciaExterna = tipoReferenciaExterna(queryType, request);
