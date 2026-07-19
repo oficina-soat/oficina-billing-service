@@ -8,7 +8,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
-import java.util.Locale;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
@@ -30,18 +29,18 @@ class MercadoPagoWebhookSignatureValidatorTest {
     }
 
     @Test
-    void deveValidarManifestoOrdersComIdNormalizadoETimestampEmMilissegundos() throws Exception {
+    void deveValidarManifestoOrdersPreservandoIdETimestampEmMilissegundos() throws Exception {
         var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
         var dataId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
         var requestId = "request-orders-1";
         var timestampMillis = TIMESTAMP * 1_000 + 123;
         var signature = "ts=" + timestampMillis + ",v1="
-                + signature(dataId.toLowerCase(Locale.ROOT), requestId, timestampMillis);
-        var signatureWithoutNormalization =
-                "ts=" + timestampMillis + ",v1=" + signature(dataId, requestId, timestampMillis);
+                + signature(dataId, requestId, timestampMillis);
+        var signatureWithLowercaseId = "ts=" + timestampMillis + ",v1="
+                + signature(dataId.toLowerCase(java.util.Locale.ROOT), requestId, timestampMillis);
 
         assertTrue(validator.isValid(signature, requestId, dataId));
-        assertFalse(validator.isValid(signatureWithoutNormalization, requestId, dataId));
+        assertFalse(validator.isValid(signatureWithLowercaseId, requestId, dataId));
         assertFalse(validator.isValid(signature, requestId, "outra-order"));
     }
 
@@ -75,7 +74,7 @@ class MercadoPagoWebhookSignatureValidatorTest {
         var requestId = "request-orders-expired";
         var timestampMillis = (TIMESTAMP - 301) * 1_000;
         var signature = "ts=" + timestampMillis + ",v1="
-                + signature(dataId.toLowerCase(Locale.ROOT), requestId, timestampMillis);
+                + signature(dataId, requestId, timestampMillis);
 
         assertFalse(validator.isValid(signature, requestId, dataId));
     }

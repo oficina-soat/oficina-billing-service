@@ -8,7 +8,6 @@ import java.security.MessageDigest;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.HexFormat;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -66,7 +65,7 @@ public class MercadoPagoWebhookSignatureValidator {
         var manifest = new StringBuilder();
         if (dataId != null && !dataId.isBlank()) {
             manifest.append("id:")
-                    .append(dataId.toLowerCase(Locale.ROOT))
+                    .append(dataId)
                     .append(';');
         }
         manifest.append("request-id:")
