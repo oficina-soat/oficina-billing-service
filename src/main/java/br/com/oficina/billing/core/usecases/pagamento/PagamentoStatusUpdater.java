@@ -2,6 +2,7 @@ package br.com.oficina.billing.core.usecases.pagamento;
 
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import java.time.Clock;
 import java.time.OffsetDateTime;
@@ -25,6 +26,7 @@ final class PagamentoStatusUpdater {
                 status,
                 provedor,
                 transacaoExternaId,
+                pagamento.tipoReferenciaExterna(),
                 pagamento.instrucoesPix());
     }
 
@@ -36,6 +38,26 @@ final class PagamentoStatusUpdater {
             String provedor,
             String transacaoExternaId,
             br.com.oficina.billing.core.entities.InstrucoesPix instrucoesPix) {
+        return atualizarStatus(
+                repository,
+                clock,
+                pagamento,
+                status,
+                provedor,
+                transacaoExternaId,
+                pagamento.tipoReferenciaExterna(),
+                instrucoesPix);
+    }
+
+    static CompletableFuture<Pagamento> atualizarStatus(
+            PagamentoRepositoryGateway repository,
+            Clock clock,
+            Pagamento pagamento,
+            StatusPagamento status,
+            String provedor,
+            String transacaoExternaId,
+            TipoReferenciaExternaPagamento tipoReferenciaExterna,
+            br.com.oficina.billing.core.entities.InstrucoesPix instrucoesPix) {
         var atualizado = new Pagamento(
                 pagamento.pagamentoId(),
                 pagamento.ordemServicoId(),
@@ -45,6 +67,7 @@ final class PagamentoStatusUpdater {
                 status,
                 provedor,
                 transacaoExternaId,
+                tipoReferenciaExterna,
                 instrucoesPix,
                 pagamento.criadoEm(),
                 OffsetDateTime.now(clock));

@@ -2,6 +2,7 @@ package br.com.oficina.billing.interfaces.controllers;
 
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Pagamento;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.usecases.pagamento.CancelarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.ConfirmarPagamentoUseCase;
@@ -102,6 +103,14 @@ public class PagamentoController {
 
     public CompletableFuture<Pagamento> reconciliarPagamentoPorTransacao(String transacaoExternaId) {
         return reconciliarPagamentoUseCase.executarPorTransacaoExternaId(transacaoExternaId);
+    }
+
+    public CompletableFuture<Pagamento> reconciliarPagamentoPorTransacao(
+            String transacaoExternaId,
+            TipoReferenciaExternaPagamento tipoReferenciaExterna) {
+        return reconciliarPagamentoUseCase.executarPorTransacaoExternaId(
+                transacaoExternaId,
+                tipoReferenciaExterna);
     }
 
     private void validar(PagamentoCreateRequest request) {

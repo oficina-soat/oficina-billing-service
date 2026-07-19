@@ -93,7 +93,9 @@ class RuntimeDependenciesValidatorTest {
         properties.put("oficina.mercado-pago.enabled", "true");
         properties.put("oficina.mercado-pago.access-token", "");
         properties.put("oficina.mercado-pago.webhook-secret", "");
+        properties.put("oficina.mercado-pago.api-mode", "unknown");
         properties.put("oficina.mercado-pago.payer-email", "PAYER_PLACEHOLDER");
+        properties.put("oficina.mercado-pago.payer-first-name", "APRO");
         properties.put("quarkus.rest-client.mercado-pago-api.url", "");
         var probes = new AtomicInteger();
         var validator = new RuntimeDependenciesValidator(
@@ -124,7 +126,10 @@ class RuntimeDependenciesValidatorTest {
         assertTrue(exception.getMessage().contains("credenciais AWS estaticas nao podem conter placeholder"));
         assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_ACCESS_TOKEN"));
         assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_WEBHOOK_SECRET"));
+        assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_API_MODE"));
         assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_PAYER_EMAIL"));
+        assertTrue(exception.getMessage().contains("APRO e permitido apenas em lab ou test"));
+        assertTrue(exception.getMessage().contains("usuario oficial no cenario APRO"));
         assertTrue(exception.getMessage().contains("OFICINA_MERCADO_PAGO_API_URL"));
     }
 
@@ -210,6 +215,7 @@ class RuntimeDependenciesValidatorTest {
         properties.put("oficina.messaging.worker.enabled", "true");
         properties.put("AWS_REGION", "us-east-1");
         properties.put("oficina.mercado-pago.enabled", "false");
+        properties.put("oficina.mercado-pago.api-mode", "orders");
         properties.put("oficina.mercado-pago.payer-email", "cliente@oficina.com");
         properties.put("quarkus.rest-client.mercado-pago-api.url", "https://api.mercadopago.com");
         return properties;

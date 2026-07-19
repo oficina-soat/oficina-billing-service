@@ -10,6 +10,7 @@ import br.com.oficina.billing.core.entities.InstrucoesPix;
 import br.com.oficina.billing.core.entities.MetodoPagamento;
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoGateway;
@@ -258,6 +259,16 @@ class ReconciliarPagamentoUseCaseTest {
                         events)
                 .executar(new ReconciliarPagamentoUseCase.Command(integrated.pagamentoId()));
         assertFutureCause(BusinessException.class, mismatchedTransaction);
+
+        var mismatchedReferenceType = new ReconciliarPagamentoUseCase(
+                        repository,
+                        gatewayReturning(PagamentoGatewayResult.confirmado(
+                                "mercado-pago",
+                                integrated.transacaoExternaId(),
+                                TipoReferenciaExternaPagamento.ORDER)),
+                        events)
+                .executar(new ReconciliarPagamentoUseCase.Command(integrated.pagamentoId()));
+        assertFutureCause(BusinessException.class, mismatchedReferenceType);
     }
 
     @Test

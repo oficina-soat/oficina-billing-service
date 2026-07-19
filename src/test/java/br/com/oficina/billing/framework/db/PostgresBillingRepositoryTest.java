@@ -14,6 +14,7 @@ import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.StatusOrcamento;
 import br.com.oficina.billing.core.entities.StatusPagamento;
 import br.com.oficina.billing.core.entities.TipoItemOrcamento;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.core.interfaces.gateway.OrcamentoRepositoryGateway;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import br.com.oficina.billing.framework.idempotency.IdempotencyRecord.ProcessingStatus;
@@ -37,6 +38,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.flywaydb.core.Flyway;
+import org.flywaydb.core.api.MigrationVersion;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @QuarkusTest
@@ -235,6 +238,15 @@ class PostgresBillingRepositoryTest {
         var persisted = pagamentoRepository.findByTransacaoExternaId(pending.transacaoExternaId())
                 .join().orElseThrow();
         assertEquals(instructions, persisted.instrucoesPix());
+        assertEquals(TipoReferenciaExternaPagamento.PAYMENT, persisted.tipoReferenciaExterna());
+        assertEquals(
+                pagamentoId,
+                pagamentoRepository.findByTransacaoExternaId(
+                                pending.transacaoExternaId(),
+                                TipoReferenciaExternaPagamento.PAYMENT)
+                        .join()
+                        .orElseThrow()
+                        .pagamentoId());
         assertTrue(pagamentoRepository.findByTransacaoExternaId("missing-transaction").join().isEmpty());
 
         var confirmed = new Pagamento(
@@ -269,6 +281,148 @@ class PostgresBillingRepositoryTest {
         assertFalse(concurrentUpdate.updated());
         assertEquals(StatusPagamento.CONFIRMADO, concurrentUpdate.pagamento().status());
         assertEquals(instructions, concurrentUpdate.pagamento().instrucoesPix());
+    }
+
+    @Test
+    void deveDistinguirOrderDePaymentComMesmoIdentificadorExterno() {
+        var paymentBudgetId = UUID.randomUUID();
+        var orderBudgetId = UUID.randomUUID();
+        var paymentOrderServiceId = UUID.randomUUID();
+        var orderOrderServiceId = UUID.randomUUID();
+        var now = OffsetDateTime.parse("2026-07-19T12:00:00Z");
+        for (var budget : List.of(
+                new Orcamento(
+                        paymentBudgetId,
+                        paymentOrderServiceId,
+                        List.of(),
+                        BigDecimal.ONE,
+                        StatusOrcamento.APROVADO,
+                        now,
+                        now),
+                new Orcamento(
+                        orderBudgetId,
+                        orderOrderServiceId,
+                        List.of(),
+                        BigDecimal.ONE,
+                        StatusOrcamento.APROVADO,
+                        now,
+                        now))) {
+            orcamentoRepository.save(budget).join();
+        }
+        var externalId = "shared-provider-reference";
+        var payment = new Pagamento(
+                UUID.randomUUID(),
+                paymentOrderServiceId,
+                paymentBudgetId,
+                BigDecimal.ONE,
+                MetodoPagamento.PIX,
+                StatusPagamento.CRIADO,
+                "mercado-pago",
+                externalId,
+                TipoReferenciaExternaPagamento.PAYMENT,
+                null,
+                now,
+                now);
+        var order = new Pagamento(
+                UUID.randomUUID(),
+                orderOrderServiceId,
+                orderBudgetId,
+                BigDecimal.ONE,
+                MetodoPagamento.PIX,
+                StatusPagamento.CRIADO,
+                "mercado-pago",
+                externalId,
+                TipoReferenciaExternaPagamento.ORDER,
+                null,
+                now,
+                now);
+
+        pagamentoRepository.save(payment).join();
+        pagamentoRepository.save(order).join();
+
+        assertEquals(
+                payment.pagamentoId(),
+                pagamentoRepository.findByTransacaoExternaId(
+                                externalId,
+                                TipoReferenciaExternaPagamento.PAYMENT)
+                        .join()
+                        .orElseThrow()
+                        .pagamentoId());
+        assertEquals(
+                order.pagamentoId(),
+                pagamentoRepository.findByTransacaoExternaId(
+                                externalId,
+                                TipoReferenciaExternaPagamento.ORDER)
+                        .join()
+                        .orElseThrow()
+                        .pagamentoId());
+    }
+
+    @Test
+    void deveFazerBackfillDePaymentsLegadosNaMigrationV9() {
+        var schema = "migration_orders_" + UUID.randomUUID().toString().replace("-", "");
+        Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .schemas(schema)
+                .defaultSchema(schema)
+                .target(MigrationVersion.fromVersion("8"))
+                .load()
+                .migrate();
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.randomUUID();
+        var pagamentoId = UUID.randomUUID();
+        var now = OffsetDateTime.parse("2026-07-19T12:00:00Z");
+        try (var connection = dataSource.getConnection();
+                var budgetStatement = connection.prepareStatement("""
+                        INSERT INTO %s.orcamento (
+                            id, ordem_de_servico_id, valor_total, status, criado_em, atualizado_em
+                        ) VALUES (?, ?, ?, 'APROVADO', ?, ?)
+                        """.formatted(schema));
+                var paymentStatement = connection.prepareStatement("""
+                        INSERT INTO %s.pagamento (
+                            id, ordem_de_servico_id, orcamento_id, valor, metodo, status,
+                            provedor, transacao_externa_id, criado_em, atualizado_em
+                        ) VALUES (?, ?, ?, ?, 'PIX', 'CRIADO', 'mercado-pago', ?, ?, ?)
+                        """.formatted(schema))) {
+            budgetStatement.setObject(1, orcamentoId);
+            budgetStatement.setObject(2, ordemServicoId);
+            budgetStatement.setBigDecimal(3, BigDecimal.ONE);
+            budgetStatement.setObject(4, now);
+            budgetStatement.setObject(5, now);
+            budgetStatement.executeUpdate();
+
+            paymentStatement.setObject(1, pagamentoId);
+            paymentStatement.setObject(2, ordemServicoId);
+            paymentStatement.setObject(3, orcamentoId);
+            paymentStatement.setBigDecimal(4, BigDecimal.ONE);
+            paymentStatement.setString(5, "legacy-payment-id");
+            paymentStatement.setObject(6, now);
+            paymentStatement.setObject(7, now);
+            paymentStatement.executeUpdate();
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException(exception);
+        }
+
+        Flyway.configure()
+                .dataSource(dataSource)
+                .locations("classpath:db/migration")
+                .schemas(schema)
+                .defaultSchema(schema)
+                .load()
+                .migrate();
+
+        try (var connection = dataSource.getConnection();
+                var statement = connection.prepareStatement(
+                        "SELECT tipo_referencia_externa FROM %s.pagamento WHERE id = ?".formatted(schema))) {
+            statement.setObject(1, pagamentoId);
+            try (var resultSet = statement.executeQuery()) {
+                assertTrue(resultSet.next());
+                assertEquals("PAYMENT", resultSet.getString("tipo_referencia_externa"));
+            }
+        } catch (java.sql.SQLException exception) {
+            throw new IllegalStateException(exception);
+        }
     }
 
     @Test

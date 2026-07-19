@@ -1,6 +1,7 @@
 package br.com.oficina.billing.framework.db;
 
 import br.com.oficina.billing.core.entities.Pagamento;
+import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.core.interfaces.gateway.PagamentoRepositoryGateway;
 import io.quarkus.arc.properties.IfBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -67,6 +68,16 @@ public class InMemoryPagamentoDataSourceAdapter implements PagamentoRepositoryGa
     public CompletableFuture<Optional<Pagamento>> findByTransacaoExternaId(String transacaoExternaId) {
         return CompletableFuture.completedFuture(storage.values().stream()
                 .filter(pagamento -> transacaoExternaId.equals(pagamento.transacaoExternaId()))
+                .findFirst());
+    }
+
+    @Override
+    public CompletableFuture<Optional<Pagamento>> findByTransacaoExternaId(
+            String transacaoExternaId,
+            TipoReferenciaExternaPagamento tipoReferenciaExterna) {
+        return CompletableFuture.completedFuture(storage.values().stream()
+                .filter(pagamento -> transacaoExternaId.equals(pagamento.transacaoExternaId()))
+                .filter(pagamento -> pagamento.tipoReferenciaExterna() == tipoReferenciaExterna)
                 .findFirst());
     }
 

@@ -127,8 +127,11 @@ public class RuntimeDependenciesValidator {
         private final boolean mercadoPagoEnabled;
         private final String mercadoPagoAccessToken;
         private final String mercadoPagoWebhookSecret;
+        private final String mercadoPagoApiMode;
         private final String mercadoPagoPayerEmail;
+        private final String mercadoPagoPayerFirstName;
         private final String mercadoPagoApiUrl;
+        private final String deploymentEnvironment;
 
         private RuntimeSettings(Config config) {
             persistenceKind = value(config, "oficina.persistence.kind");
@@ -154,8 +157,11 @@ public class RuntimeDependenciesValidator {
             mercadoPagoEnabled = booleanValue(config, "oficina.mercado-pago.enabled", false);
             mercadoPagoAccessToken = value(config, "oficina.mercado-pago.access-token");
             mercadoPagoWebhookSecret = value(config, "oficina.mercado-pago.webhook-secret");
+            mercadoPagoApiMode = value(config, "oficina.mercado-pago.api-mode");
             mercadoPagoPayerEmail = value(config, "oficina.mercado-pago.payer-email");
+            mercadoPagoPayerFirstName = value(config, "oficina.mercado-pago.payer-first-name");
             mercadoPagoApiUrl = value(config, "quarkus.rest-client.mercado-pago-api.url");
+            deploymentEnvironment = value(config, "oficina.observability.deployment-environment");
         }
 
         static RuntimeSettings from(Config config) {
@@ -191,8 +197,21 @@ public class RuntimeDependenciesValidator {
             if (mercadoPagoEnabled) {
                 require(mercadoPagoAccessToken, "OFICINA_MERCADO_PAGO_ACCESS_TOKEN", violations);
                 require(mercadoPagoWebhookSecret, "OFICINA_MERCADO_PAGO_WEBHOOK_SECRET", violations);
+                if (!"orders".equalsIgnoreCase(mercadoPagoApiMode)
+                        && !"payments".equalsIgnoreCase(mercadoPagoApiMode)) {
+                    violations.add("OFICINA_MERCADO_PAGO_API_MODE deve ser orders ou payments");
+                }
                 require(mercadoPagoPayerEmail, "OFICINA_MERCADO_PAGO_PAYER_EMAIL", violations);
                 require(mercadoPagoApiUrl, "OFICINA_MERCADO_PAGO_API_URL", violations);
+            }
+            if ("APRO".equalsIgnoreCase(mercadoPagoPayerFirstName)) {
+                if (!"lab".equalsIgnoreCase(deploymentEnvironment)
+                        && !"test".equalsIgnoreCase(deploymentEnvironment)) {
+                    violations.add("OFICINA_MERCADO_PAGO_PAYER_FIRST_NAME=APRO e permitido apenas em lab ou test");
+                }
+                if (!"test_user_br@testuser.com".equalsIgnoreCase(mercadoPagoPayerEmail)) {
+                    violations.add("OFICINA_MERCADO_PAGO_PAYER_EMAIL deve usar o usuario oficial no cenario APRO");
+                }
             }
             return List.copyOf(violations);
         }
