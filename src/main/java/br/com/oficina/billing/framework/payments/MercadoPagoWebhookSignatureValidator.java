@@ -1,5 +1,6 @@
 package br.com.oficina.billing.framework.payments;
 
+import br.com.oficina.billing.framework.observability.StructuredLog;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.nio.charset.StandardCharsets;
@@ -13,9 +14,11 @@ import java.util.stream.Collectors;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class MercadoPagoWebhookSignatureValidator {
+    private static final Logger LOG = Logger.getLogger(MercadoPagoWebhookSignatureValidator.class);
     private static final String ALGORITHM = "HmacSHA256";
     private static final long MILLISECOND_EPOCH_THRESHOLD = 1_000_000_000_000L;
 
@@ -38,22 +41,36 @@ public class MercadoPagoWebhookSignatureValidator {
     }
 
     public boolean isValid(String signature, String requestId, String dataId) {
-        if (secret == null || secret.isBlank()
-                || requestId == null || requestId.isBlank()
-                || dataId == null || dataId.isBlank()) {
-            return false;
+        if (secret == null || secret.isBlank()) {
+            return reject("secret_missing");
+        }
+        if (requestId == null || requestId.isBlank()) {
+            return reject("request_id_missing");
+        }
+        if (dataId == null || dataId.isBlank()) {
+            return reject("data_id_missing");
+        }
+        if (signature == null || signature.isBlank()) {
+            return reject("signature_missing");
         }
         var components = components(signature);
         var timestamp = parseTimestamp(components.get("ts"));
         var suppliedHash = components.get("v1");
-        if (timestamp == null || suppliedHash == null || suppliedHash.isBlank() || expired(timestamp)) {
-            return false;
+        if (timestamp == null) {
+            return reject("timestamp_invalid");
+        }
+        if (suppliedHash == null || suppliedHash.isBlank()) {
+            return reject("hash_missing");
+        }
+        if (expired(timestamp)) {
+            return reject("timestamp_expired");
         }
         var manifest = "id:" + dataId + ";request-id:" + requestId + ";ts:" + timestamp + ";";
         var expectedHash = hmac(manifest);
-        return MessageDigest.isEqual(
+        var valid = MessageDigest.isEqual(
                 expectedHash.getBytes(StandardCharsets.US_ASCII),
                 suppliedHash.getBytes(StandardCharsets.US_ASCII));
+        return valid || reject("hash_mismatch");
     }
 
     private Map<String, String> components(String signature) {
@@ -91,5 +108,12 @@ public class MercadoPagoWebhookSignatureValidator {
         } catch (java.security.GeneralSecurityException exception) {
             throw new IllegalStateException("Nao foi possivel validar assinatura do webhook.", exception);
         }
+    }
+
+    private boolean reject(String reason) {
+        StructuredLog.withFields(
+                Map.of("webhookValidationReason", reason),
+                () -> LOG.warn("mercado pago webhook signature rejected"));
+        return false;
     }
 }
