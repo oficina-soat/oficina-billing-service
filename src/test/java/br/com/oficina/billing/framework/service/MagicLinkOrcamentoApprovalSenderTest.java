@@ -19,7 +19,7 @@ import org.junit.jupiter.api.Test;
 
 class MagicLinkOrcamentoApprovalSenderTest {
     @Test
-    void deveEmitirLinksDistintosParaAsTresCapacidades() {
+    void deveEmitirUmUnicoLinkParaConsultarEAprovarOuRecusar() {
         var store = new InMemoryBillingEventStore();
         var ordemServicoId = UUID.randomUUID();
         store.registrarContato(ordemServicoId, "cliente@oficina.test");
@@ -33,9 +33,13 @@ class MagicLinkOrcamentoApprovalSenderTest {
         sender.enviar(orcamento).join();
 
         assertEquals("cliente@oficina.test", client.request.emailDestino());
-        assertTrue(client.request.conteudo().contains("/acompanhar-link?actionToken="));
-        assertTrue(client.request.conteudo().contains("/aprovar-link?actionToken="));
-        assertTrue(client.request.conteudo().contains("/recusar-link?actionToken="));
+        assertTrue(client.request.conteudo().contains("/orcamento-link?actionToken="));
+        assertFalse(client.request.conteudo().contains("/acompanhar-link?actionToken="));
+        assertFalse(client.request.conteudo().contains("/aprovar-link?actionToken="));
+        assertFalse(client.request.conteudo().contains("/recusar-link?actionToken="));
+        assertEquals(1, client.request.conteudo().lines()
+                .filter(line -> line.contains("https://api.oficina.test"))
+                .count());
         assertFalse(client.request.conteudo().contains("null"));
     }
 

@@ -17,6 +17,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @ApplicationScoped
 public class MercadoPagoWebhookSignatureValidator {
     private static final String ALGORITHM = "HmacSHA256";
+    private static final long MILLISECOND_EPOCH_THRESHOLD = 1_000_000_000_000L;
 
     private final String secret;
     private final long toleranceSeconds;
@@ -76,7 +77,10 @@ public class MercadoPagoWebhookSignatureValidator {
 
     private boolean expired(long timestamp) {
         var now = Instant.now(clock).getEpochSecond();
-        return toleranceSeconds < 1 || Math.abs(now - timestamp) > toleranceSeconds;
+        var timestampSeconds = timestamp >= MILLISECOND_EPOCH_THRESHOLD
+                ? timestamp / 1_000
+                : timestamp;
+        return toleranceSeconds < 1 || Math.abs(now - timestampSeconds) > toleranceSeconds;
     }
 
     private String hmac(String manifest) {

@@ -7,6 +7,7 @@ import br.com.oficina.billing.interfaces.presenters.OrcamentoPresenterAdapter;
 import br.com.oficina.billing.interfaces.presenters.view_model.OrcamentoViewModel;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
+import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
@@ -95,5 +96,14 @@ public class OrcamentoResource {
                     orcamentoPresenter.present(orcamento);
                     return orcamentoPresenter.viewModel();
                 }));
+    }
+
+    @POST
+    @Path("/orcamentos/{orcamentoId}/notificacao/reenvio")
+    @RolesAllowed({"administrativo", "recepcionista"})
+    @Parameter(name = "X-Idempotency-Key", in = ParameterIn.HEADER, required = true, description = "Chave de idempotência da operação mutável.")
+    public Uni<Response> reenviarNotificacaoOrcamento(@PathParam("orcamentoId") UUID orcamentoId) {
+        return toUni(() -> orcamentoController.reenviarNotificacaoOrcamento(orcamentoId)
+                .thenApply(ignored -> Response.noContent().build()));
     }
 }

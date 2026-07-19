@@ -6,6 +6,7 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.security.TestSecurity;
 import br.com.oficina.billing.framework.messaging.ApprovalTokenRecord;
 import br.com.oficina.billing.framework.messaging.BillingEventStore;
 import jakarta.inject.Inject;
@@ -59,7 +60,7 @@ class BillingResourceTest {
         given().contentType("application/x-www-form-urlencoded")
                 .formParam("actionToken", retryToken)
                 .post("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
-                .then().statusCode(409);
+                .then().statusCode(409).contentType("text/html");
         given().queryParam("actionToken", retryToken)
                 .get("/api/v1/ordens-servico/{ordemServicoId}/aprovar-link", ordemServicoId)
                 .then().statusCode(200);
@@ -90,6 +91,50 @@ class BillingResourceTest {
     }
 
     @Test
+    void shouldShowBudgetAndRegisterOneDecisionThroughUnifiedLink() throws Exception {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = UUID.fromString(given()
+                .header("X-Idempotency-Key", "publico-unificado-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("{\"ordemServicoId\":\"%s\"}".formatted(ordemServicoId))
+                .post("/api/v1/orcamentos").then().statusCode(201).extract().path("orcamentoId"));
+        var token = "token-publico-unificado";
+        var now = OffsetDateTime.now(ZoneOffset.UTC);
+        var hash = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                .digest(token.getBytes(StandardCharsets.UTF_8)));
+        eventStore.substituirTokensAprovacao(ordemServicoId, orcamentoId, "cliente@example.com", List.of(
+                new ApprovalTokenRecord(UUID.randomUUID(), hash, "DECIDIR", now, now.plusHours(1))));
+
+        given().queryParam("actionToken", token)
+                .get("/api/v1/ordens-servico/{ordemServicoId}/orcamento-link", ordemServicoId)
+                .then().statusCode(200).contentType("text/html")
+                .body(org.hamcrest.Matchers.containsString("Aprovar orçamento"))
+                .body(org.hamcrest.Matchers.containsString("Recusar orçamento"))
+                .body(org.hamcrest.Matchers.containsString("Total: R$"));
+
+        given().contentType("application/x-www-form-urlencoded")
+                .formParam("actionToken", token)
+                .formParam("decisao", "CANCELAR")
+                .post("/api/v1/ordens-servico/{ordemServicoId}/orcamento-link", ordemServicoId)
+                .then().statusCode(400);
+
+        given().contentType("application/x-www-form-urlencoded")
+                .formParam("actionToken", token)
+                .formParam("decisao", "RECUSAR")
+                .formParam("motivo", "Cliente solicitou revisão")
+                .post("/api/v1/ordens-servico/{ordemServicoId}/orcamento-link", ordemServicoId)
+                .then().statusCode(200).contentType("text/html");
+
+        given().contentType("application/x-www-form-urlencoded")
+                .formParam("actionToken", token)
+                .formParam("decisao", "APROVAR")
+                .post("/api/v1/ordens-servico/{ordemServicoId}/orcamento-link", ordemServicoId)
+                .then().statusCode(409);
+        given().get("/api/v1/orcamentos/{orcamentoId}", orcamentoId)
+                .then().statusCode(200).body("status", equalTo("RECUSADO"));
+    }
+
+    @Test
     void shouldRejectExpiredOrMismatchedPublicLinks() throws Exception {
         var ordemServicoId = UUID.randomUUID();
         var token = "token-expirado";
@@ -105,6 +150,40 @@ class BillingResourceTest {
         given().queryParam("actionToken", "token-inexistente")
                 .get("/api/v1/ordens-servico/{ordemServicoId}/recusar-link", ordemServicoId)
                 .then().statusCode(401);
+    }
+
+    @Test
+    @TestSecurity(user = "recepcao", roles = "recepcionista")
+    void shouldAuthorizeIdempotentBudgetEmailResendForReceptionist() {
+        var ordemServicoId = UUID.randomUUID();
+        var orcamentoId = given()
+                .header("X-Idempotency-Key", "orcamento-reenvio-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("{\"ordemServicoId\":\"%s\"}".formatted(ordemServicoId))
+                .post("/api/v1/orcamentos")
+                .then().statusCode(201).extract().path("orcamentoId").toString();
+        var idempotencyKey = "reenvio-" + UUID.randomUUID();
+
+        given().header("X-Idempotency-Key", idempotencyKey)
+                .contentType("application/json")
+                .body("{}")
+                .post("/api/v1/orcamentos/{orcamentoId}/notificacao/reenvio", orcamentoId)
+                .then().statusCode(204);
+        given().header("X-Idempotency-Key", idempotencyKey)
+                .contentType("application/json")
+                .body("{}")
+                .post("/api/v1/orcamentos/{orcamentoId}/notificacao/reenvio", orcamentoId)
+                .then().statusCode(204);
+    }
+
+    @Test
+    @TestSecurity(user = "mecanico", roles = "mecanico")
+    void shouldForbidBudgetEmailResendForMechanic() {
+        given().header("X-Idempotency-Key", "reenvio-negado-" + UUID.randomUUID())
+                .contentType("application/json")
+                .body("{}")
+                .post("/api/v1/orcamentos/{orcamentoId}/notificacao/reenvio", UUID.randomUUID())
+                .then().statusCode(403);
     }
 
     @Test
@@ -127,7 +206,7 @@ class BillingResourceTest {
                 .body("orcamentoId", notNullValue())
                 .body("ordemServicoId", equalTo(ordemServicoId))
                 .body("status", equalTo("GERADO"))
-                .body("acoesPermitidas", hasSize(2))
+                .body("acoesPermitidas", hasSize(3))
                 .body("acoesPermitidas[0]", equalTo("APROVAR"))
                 .body("itens", hasSize(1))
                 .body("valorTotal", equalTo(0))
