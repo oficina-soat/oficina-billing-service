@@ -29,6 +29,18 @@ class MercadoPagoWebhookSignatureValidatorTest {
     }
 
     @Test
+    void deveValidarManifestoOrdersComTimestampEmMilissegundos() throws Exception {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
+        var dataId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        var requestId = "request-orders-1";
+        var timestampMillis = TIMESTAMP * 1_000 + 123;
+        var signature = "ts=" + timestampMillis + ",v1=" + signature(dataId, requestId, timestampMillis);
+
+        assertTrue(validator.isValid(signature, requestId, dataId));
+        assertFalse(validator.isValid(signature, requestId, "outra-order"));
+    }
+
+    @Test
     void deveRejeitarAssinaturaExpiradaOuConfiguracaoAusente() throws Exception {
         var expired = new MercadoPagoWebhookSignatureValidator(SECRET, 10, CLOCK);
         var dataId = "123456";
@@ -38,6 +50,17 @@ class MercadoPagoWebhookSignatureValidatorTest {
         assertFalse(expired.isValid(signature, requestId, dataId));
         assertFalse(new MercadoPagoWebhookSignatureValidator("", 300, CLOCK)
                 .isValid(signature, requestId, dataId));
+    }
+
+    @Test
+    void deveRejeitarTimestampEmMilissegundosForaDaJanela() throws Exception {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
+        var dataId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        var requestId = "request-orders-expired";
+        var timestampMillis = (TIMESTAMP - 301) * 1_000;
+        var signature = "ts=" + timestampMillis + ",v1=" + signature(dataId, requestId, timestampMillis);
+
+        assertFalse(validator.isValid(signature, requestId, dataId));
     }
 
     @Test
