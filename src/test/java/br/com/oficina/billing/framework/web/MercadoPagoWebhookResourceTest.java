@@ -9,6 +9,8 @@ import static org.mockito.Mockito.when;
 
 import br.com.oficina.billing.core.entities.Pagamento;
 import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
+import br.com.oficina.billing.core.exceptions.BusinessException;
+import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
 import br.com.oficina.billing.framework.payments.MercadoPagoWebhookSignatureValidator;
 import br.com.oficina.billing.interfaces.controllers.PagamentoController;
 import jakarta.ws.rs.BadRequestException;
@@ -83,6 +85,58 @@ class MercadoPagoWebhookResourceTest {
         verify(controller).reconciliarPagamentoPorTransacao(
                 "123456",
                 TipoReferenciaExternaPagamento.PAYMENT);
+    }
+
+    @Test
+    void deveReconhecerReferenciaAssinadaDesconhecidaSemExporExistencia() {
+        var controller = mock(PagamentoController.class);
+        var validator = mock(MercadoPagoWebhookSignatureValidator.class);
+        when(validator.isValid("signature", "request-1", "123456")).thenReturn(true);
+        when(controller.reconciliarPagamentoPorTransacao(
+                        "123456",
+                        TipoReferenciaExternaPagamento.PAYMENT))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new ResourceNotFoundException("Pagamento do Mercado Pago nao encontrado.")));
+        var resource = new MercadoPagoWebhookResource(controller, validator);
+
+        var response = resource.receber(
+                        "signature",
+                        "request-1",
+                        null,
+                        null,
+                        new MercadoPagoWebhookResource.WebhookRequest(
+                                "payment.updated",
+                                "payment",
+                                new MercadoPagoWebhookResource.WebhookRequest.Data("123456")))
+                .await().indefinitely();
+
+        assertEquals(200, response.getStatus());
+    }
+
+    @Test
+    void deveManterFalhaDeDependenciaRetentavel() {
+        var controller = mock(PagamentoController.class);
+        var validator = mock(MercadoPagoWebhookSignatureValidator.class);
+        when(validator.isValid("signature", "request-1", "payment-1")).thenReturn(true);
+        when(controller.reconciliarPagamentoPorTransacao(
+                        "payment-1",
+                        TipoReferenciaExternaPagamento.PAYMENT))
+                .thenReturn(CompletableFuture.failedFuture(
+                        new BusinessException("DEPENDENCY_FAILURE", "Mercado Pago indisponivel.")));
+        var resource = new MercadoPagoWebhookResource(controller, validator);
+
+        assertThrows(
+                BusinessException.class,
+                () -> resource.receber(
+                                "signature",
+                                "request-1",
+                                "payment-1",
+                                "payment",
+                                new MercadoPagoWebhookResource.WebhookRequest(
+                                        "payment.updated",
+                                        "payment",
+                                        new MercadoPagoWebhookResource.WebhookRequest.Data("payment-1")))
+                        .await().indefinitely());
     }
 
     @Test
