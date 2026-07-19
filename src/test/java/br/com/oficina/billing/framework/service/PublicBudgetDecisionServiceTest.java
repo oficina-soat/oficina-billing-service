@@ -39,7 +39,7 @@ class PublicBudgetDecisionServiceTest {
 
     private static final class FailingOrcamentoController extends OrcamentoController {
         private FailingOrcamentoController() {
-            super(null, null, null, null, null);
+            super(null, null, null, null, null, null);
         }
 
         @Override

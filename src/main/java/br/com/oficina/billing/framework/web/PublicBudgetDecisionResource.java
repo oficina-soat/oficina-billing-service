@@ -3,7 +3,9 @@ package br.com.oficina.billing.framework.web;
 import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
 
 import br.com.oficina.billing.core.entities.Orcamento;
+import br.com.oficina.billing.core.exceptions.BusinessException;
 import br.com.oficina.billing.framework.service.PublicBudgetDecisionService;
+import br.com.oficina.billing.framework.service.PublicBudgetDecisionService.DecisaoInvalidaException;
 import br.com.oficina.billing.framework.service.PublicBudgetDecisionService.TokenIndisponivelException;
 import io.smallrye.common.annotation.Blocking;
 import io.smallrye.mutiny.Uni;
@@ -35,6 +37,27 @@ public class PublicBudgetDecisionResource {
             @PathParam("ordemServicoId") UUID ordemServicoId,
             @QueryParam("actionToken") String actionToken) {
         return pagina(() -> service.consultar(ordemServicoId, actionToken, "ACOMPANHAR"), null, actionToken);
+    }
+
+    @GET
+    @Path("/ordens-servico/{ordemServicoId}/orcamento-link")
+    public Uni<Response> abrirDecisao(
+            @PathParam("ordemServicoId") UUID ordemServicoId,
+            @QueryParam("actionToken") String actionToken) {
+        return pagina(() -> service.consultarDecisao(ordemServicoId, actionToken), "DECIDIR", actionToken);
+    }
+
+    @POST
+    @Path("/ordens-servico/{ordemServicoId}/orcamento-link")
+    @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
+    public Uni<Response> decidir(
+            @PathParam("ordemServicoId") UUID ordemServicoId,
+            @FormParam("actionToken") String actionToken,
+            @FormParam("decisao") String decisao,
+            @FormParam("motivo") String motivo) {
+        return resultado(
+                () -> service.decidirUnificado(ordemServicoId, actionToken, decisao, motivo),
+                "Decisão registrada");
     }
 
     @GET
@@ -86,7 +109,11 @@ public class PublicBudgetDecisionResource {
                         "A decisão foi registrada com sucesso para a ordem de serviço "
                                 + escape(orcamento.ordemServicoId().toString()) + ".", "")).build())
                 .onFailure(TokenIndisponivelException.class)
-                .recoverWithItem(error(409, "Decisão não registrada", "O link já foi utilizado ou expirou."));
+                .recoverWithItem(error(409, "Decisão não registrada", "O link já foi utilizado ou expirou."))
+                .onFailure(DecisaoInvalidaException.class)
+                .recoverWithItem(error(400, "Escolha uma decisão", "Aprove ou recuse o orçamento."))
+                .onFailure(BusinessException.class)
+                .recoverWithItem(error(409, "Decisão não registrada", "O orçamento não aceita mais esta decisão."));
     }
 
     private Response error(int status, String title, String message) {
@@ -98,9 +125,19 @@ public class PublicBudgetDecisionResource {
         orcamento.itens().forEach(item -> items.append("<li>")
                 .append(escape(item.nome())).append(" — ")
                 .append(escape(item.quantidade().toPlainString())).append(" × R$ ")
-                .append(escape(item.valorUnitario().toPlainString())).append("</li>"));
+                .append(escape(item.valorUnitario().toPlainString())).append(" = R$ ")
+                .append(escape(item.valorTotal().toPlainString())).append("</li>"));
         items.append("</ul>");
-        var form = decision == null ? "" : """
+        var form = decision == null ? "" : "DECIDIR".equals(decision) ? """
+                <form method="post">
+                  <input type="hidden" name="actionToken" value="%s">
+                  <label>Observação (opcional)<textarea name="motivo" maxlength="500"></textarea></label>
+                  <div class="actions">
+                    <button type="submit" name="decisao" value="APROVAR">Aprovar orçamento</button>
+                    <button class="reject" type="submit" name="decisao" value="RECUSAR">Recusar orçamento</button>
+                  </div>
+                </form>
+                """.formatted(escape(token)) : """
                 <form method="post">
                   <input type="hidden" name="actionToken" value="%s">
                   <label>Observação (opcional)<textarea name="motivo" maxlength="500"></textarea></label>
@@ -108,7 +145,8 @@ public class PublicBudgetDecisionResource {
                 </form>
                 """.formatted(escape(token), "APROVAR".equals(decision) ? "Aprovar" : "Recusar");
         return document("Orçamento da ordem de serviço",
-                "<p>Status: <strong>" + escape(orcamento.status().name()) + "</strong></p>"
+                "<p>Ordem de serviço: <strong>" + escape(orcamento.ordemServicoId().toString()) + "</strong></p>"
+                        + "<p>Status: <strong>" + escape(orcamento.status().name()) + "</strong></p>"
                         + items + "<p class=\"total\">Total: R$ "
                         + escape(orcamento.valorTotal().toPlainString()) + "</p>", form);
     }
@@ -122,6 +160,7 @@ public class PublicBudgetDecisionResource {
                 main{max-width:42rem;margin:auto;background:white;padding:2rem;border-radius:.75rem;box-shadow:0 2px 12px #0002}
                 h1{color:#174a7e}label{display:grid;gap:.5rem}textarea{min-height:6rem;padding:.75rem}
                 button{margin-top:1rem;padding:.8rem 1.2rem;background:#174a7e;color:white;border:0;border-radius:.35rem;font-weight:700}
+                .actions{display:flex;gap:.75rem;flex-wrap:wrap}.actions .reject{background:#8f2430}
                 .total{font-size:1.25rem;font-weight:700}</style></head><body><main>
                 <h1>%s</h1>%s%s</main></body></html>
                 """.formatted(escape(title), escape(title), content, action);

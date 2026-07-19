@@ -11,10 +11,9 @@ import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
-import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HexFormat;
-import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -51,42 +50,33 @@ public class MagicLinkOrcamentoApprovalSender implements OrcamentoApprovalSender
                     .orElseThrow(() -> new IllegalStateException(
                             "Contato do cliente nao projetado para a ordem de servico."));
             var now = OffsetDateTime.now(ZoneOffset.UTC);
-            var rawTokens = new LinkedHashMap<String, String>();
-            var records = new ArrayList<ApprovalTokenRecord>();
-            for (var action : new String[] {"ACOMPANHAR", "APROVAR", "RECUSAR"}) {
-                var rawToken = generateToken();
-                rawTokens.put(action, rawToken);
-                records.add(new ApprovalTokenRecord(
-                        java.util.UUID.randomUUID(), sha256(rawToken), action, now, now.plusHours(VALIDITY_HOURS)));
-            }
+            var rawToken = generateToken();
+            var records = List.of(new ApprovalTokenRecord(
+                    java.util.UUID.randomUUID(), sha256(rawToken), "DECIDIR", now, now.plusHours(VALIDITY_HOURS)));
             store.substituirTokensAprovacao(
                     orcamento.ordemServicoId(), orcamento.orcamentoId(), email, records);
             client.enviarEmail(new NotificacaoEmailRequest(
                     email,
-                    "Orcamento da ordem de servico",
-                    emailBody(orcamento, rawTokens)));
+                    "Orçamento da ordem de serviço",
+                    emailBody(orcamento, rawToken)));
             return CompletableFuture.completedFuture(null);
         } catch (RuntimeException exception) {
             return CompletableFuture.failedFuture(exception);
         }
     }
 
-    private String emailBody(Orcamento orcamento, LinkedHashMap<String, String> tokens) {
+    private String emailBody(Orcamento orcamento, String token) {
         return """
                 O orçamento da sua ordem de serviço está disponível.
 
                 Valor total: R$ %s
 
-                Acompanhar: %s
-                Aprovar: %s
-                Recusar: %s
+                Consulte os itens e aprove ou recuse o orçamento: %s
 
-                Os links são individuais, expiram em 24 horas e só podem ser usados uma vez.
+                O link expira em 24 horas e permite registrar uma única decisão.
                 """.formatted(
                 orcamento.valorTotal().toPlainString(),
-                link(orcamento, "acompanhar-link", tokens.get("ACOMPANHAR")),
-                link(orcamento, "aprovar-link", tokens.get("APROVAR")),
-                link(orcamento, "recusar-link", tokens.get("RECUSAR")));
+                link(orcamento, "orcamento-link", token));
     }
 
     private String link(Orcamento orcamento, String route, String token) {

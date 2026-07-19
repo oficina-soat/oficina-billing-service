@@ -30,8 +30,33 @@ public class PublicBudgetDecisionService {
     }
 
     public CompletableFuture<Orcamento> decidir(UUID ordemServicoId, String rawToken, String action, String motivo) {
+        return decidir(ordemServicoId, rawToken, action, action, motivo);
+    }
+
+    public CompletableFuture<Orcamento> consultarDecisao(UUID ordemServicoId, String rawToken) {
+        var grant = validar(ordemServicoId, rawToken, "DECIDIR");
+        return controller.consultarOrcamento(grant.orcamentoId());
+    }
+
+    public CompletableFuture<Orcamento> decidirUnificado(
+            UUID ordemServicoId,
+            String rawToken,
+            String decisao,
+            String motivo) {
+        if (!"APROVAR".equals(decisao) && !"RECUSAR".equals(decisao)) {
+            throw new DecisaoInvalidaException("Escolha aprovar ou recusar o orçamento.");
+        }
+        return decidir(ordemServicoId, rawToken, "DECIDIR", decisao, motivo);
+    }
+
+    private CompletableFuture<Orcamento> decidir(
+            UUID ordemServicoId,
+            String rawToken,
+            String capability,
+            String decisao,
+            String motivo) {
+        var grant = validar(ordemServicoId, rawToken, capability);
         var hash = sha256(rawToken);
-        var grant = validar(ordemServicoId, rawToken, action);
         var now = OffsetDateTime.now(ZoneOffset.UTC);
         if (!store.consumirTokenAprovacao(hash, now)) {
             throw new TokenIndisponivelException("Este link ja foi utilizado ou expirou.");
@@ -39,7 +64,7 @@ public class PublicBudgetDecisionService {
         var request = new OrcamentoController.DecisaoOrcamentoRequest(motivo);
         CompletableFuture<Orcamento> decision;
         try {
-            decision = "APROVAR".equals(action)
+            decision = "APROVAR".equals(decisao)
                     ? controller.aprovarOrcamento(grant.orcamentoId(), request)
                     : controller.recusarOrcamento(grant.orcamentoId(), request);
         } catch (RuntimeException exception) {
@@ -77,6 +102,12 @@ public class PublicBudgetDecisionService {
 
     public static final class TokenIndisponivelException extends RuntimeException {
         public TokenIndisponivelException(String message) {
+            super(message);
+        }
+    }
+
+    public static final class DecisaoInvalidaException extends RuntimeException {
+        public DecisaoInvalidaException(String message) {
             super(message);
         }
     }

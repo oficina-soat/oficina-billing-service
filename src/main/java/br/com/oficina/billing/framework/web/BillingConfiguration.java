@@ -12,6 +12,7 @@ import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentosDaOrdemServicoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.GerarOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.RecusarOrcamentoUseCase;
+import br.com.oficina.billing.core.usecases.orcamento.ReenviarNotificacaoOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.CancelarPagamentoUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.CancelarPagamentosCriadosDaOrdemUseCase;
 import br.com.oficina.billing.core.usecases.pagamento.ConfirmarPagamentoUseCase;
@@ -77,6 +78,14 @@ public class BillingConfiguration {
             OrcamentoRepositoryGateway repository,
             OutboxEventSender outboxEventSender) {
         return new RecusarOrcamentoUseCase(repository, outboxEventSender);
+    }
+
+    @Produces
+    @ApplicationScoped
+    ReenviarNotificacaoOrcamentoUseCase reenviarNotificacaoOrcamentoUseCase(
+            OrcamentoRepositoryGateway repository,
+            OrcamentoApprovalSender approvalSender) {
+        return new ReenviarNotificacaoOrcamentoUseCase(repository, approvalSender);
     }
 
     @Produces
@@ -161,13 +170,15 @@ public class BillingConfiguration {
             ConsultarOrcamentoUseCase consultarOrcamentoUseCase,
             ConsultarOrcamentosDaOrdemServicoUseCase consultarOrcamentosDaOrdemServicoUseCase,
             AprovarOrcamentoUseCase aprovarOrcamentoUseCase,
-            RecusarOrcamentoUseCase recusarOrcamentoUseCase) {
+            RecusarOrcamentoUseCase recusarOrcamentoUseCase,
+            ReenviarNotificacaoOrcamentoUseCase reenviarNotificacaoOrcamentoUseCase) {
         return new OrcamentoController(
                 gerarOrcamentoUseCase,
                 consultarOrcamentoUseCase,
                 consultarOrcamentosDaOrdemServicoUseCase,
                 aprovarOrcamentoUseCase,
-                recusarOrcamentoUseCase);
+                recusarOrcamentoUseCase,
+                reenviarNotificacaoOrcamentoUseCase);
     }
 
     @Produces

@@ -7,6 +7,7 @@ import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.ConsultarOrcamentosDaOrdemServicoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.GerarOrcamentoUseCase;
 import br.com.oficina.billing.core.usecases.orcamento.RecusarOrcamentoUseCase;
+import br.com.oficina.billing.core.usecases.orcamento.ReenviarNotificacaoOrcamentoUseCase;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -17,18 +18,21 @@ public class OrcamentoController {
     private final ConsultarOrcamentosDaOrdemServicoUseCase consultarOrcamentosDaOrdemServicoUseCase;
     private final AprovarOrcamentoUseCase aprovarOrcamentoUseCase;
     private final RecusarOrcamentoUseCase recusarOrcamentoUseCase;
+    private final ReenviarNotificacaoOrcamentoUseCase reenviarNotificacaoOrcamentoUseCase;
 
     public OrcamentoController(
             GerarOrcamentoUseCase gerarOrcamentoUseCase,
             ConsultarOrcamentoUseCase consultarOrcamentoUseCase,
             ConsultarOrcamentosDaOrdemServicoUseCase consultarOrcamentosDaOrdemServicoUseCase,
             AprovarOrcamentoUseCase aprovarOrcamentoUseCase,
-            RecusarOrcamentoUseCase recusarOrcamentoUseCase) {
+            RecusarOrcamentoUseCase recusarOrcamentoUseCase,
+            ReenviarNotificacaoOrcamentoUseCase reenviarNotificacaoOrcamentoUseCase) {
         this.gerarOrcamentoUseCase = gerarOrcamentoUseCase;
         this.consultarOrcamentoUseCase = consultarOrcamentoUseCase;
         this.consultarOrcamentosDaOrdemServicoUseCase = consultarOrcamentosDaOrdemServicoUseCase;
         this.aprovarOrcamentoUseCase = aprovarOrcamentoUseCase;
         this.recusarOrcamentoUseCase = recusarOrcamentoUseCase;
+        this.reenviarNotificacaoOrcamentoUseCase = reenviarNotificacaoOrcamentoUseCase;
     }
 
     public CompletableFuture<Orcamento> gerarOrcamento(GerarOrcamentoRequest request) {
@@ -55,6 +59,11 @@ public class OrcamentoController {
         return recusarOrcamentoUseCase.executar(new RecusarOrcamentoUseCase.Command(
                 orcamentoId,
                 request == null ? null : request.motivo()));
+    }
+
+    public CompletableFuture<Orcamento> reenviarNotificacaoOrcamento(UUID orcamentoId) {
+        return reenviarNotificacaoOrcamentoUseCase.executar(
+                new ReenviarNotificacaoOrcamentoUseCase.Command(orcamentoId));
     }
 
     private void validar(GerarOrcamentoRequest request) {

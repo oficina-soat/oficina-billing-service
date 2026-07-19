@@ -113,7 +113,8 @@ public class IdempotencyKeyFilter implements ContainerRequestFilter, ContainerRe
 
     private boolean isPublicCapability(ContainerRequestContext requestContext) {
         var path = requestContext.getUriInfo().getPath();
-        return path.endsWith("/aprovar-link")
+        return path.endsWith("/orcamento-link")
+                || path.endsWith("/aprovar-link")
                 || path.endsWith("/recusar-link")
                 || path.endsWith("/integracoes/mercado-pago/webhooks");
     }
