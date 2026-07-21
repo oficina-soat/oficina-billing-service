@@ -26,7 +26,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 @Priority(Priorities.AUTHENTICATION - 100)
 public class MercadoPagoWebhookRawCaptureFilter implements ContainerRequestFilter {
     static final String WEBHOOK_PATH = "api/v1/integracoes/mercado-pago/webhooks";
-    static final Path DEFAULT_CAPTURE_PATH = Path.of("/tmp/mercado-pago-webhook-request.json");
+    static final Path DEFAULT_CAPTURE_PATH = Path.of(
+            System.getProperty("user.dir"),
+            ".oficina-diagnostics",
+            "mercado-pago-webhook-request.json");
     private static final int MAX_ENTITY_BYTES = 1_048_576;
 
     private final boolean enabled;
@@ -78,6 +81,7 @@ public class MercadoPagoWebhookRawCaptureFilter implements ContainerRequestFilte
     }
 
     private void capture(ContainerRequestContext requestContext, byte[] entity) throws IOException {
+        createPrivateCaptureDirectory();
         var capturedRequest = new LinkedHashMap<String, Object>();
         capturedRequest.put("capturedAt", Instant.now(clock).toString());
         capturedRequest.put("environment", environment);
@@ -93,12 +97,23 @@ public class MercadoPagoWebhookRawCaptureFilter implements ContainerRequestFilte
                     java.nio.charset.StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE_NEW,
                     StandardOpenOption.WRITE);
-        } catch (FileAlreadyExistsException ignored) {
+        } catch (FileAlreadyExistsException _) {
             return;
         }
         Files.setPosixFilePermissions(
                 capturePath,
                 java.util.Set.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+    }
+
+    private void createPrivateCaptureDirectory() throws IOException {
+        var captureDirectory = capturePath.getParent();
+        Files.createDirectories(captureDirectory);
+        Files.setPosixFilePermissions(
+                captureDirectory,
+                java.util.Set.of(
+                        PosixFilePermission.OWNER_READ,
+                        PosixFilePermission.OWNER_WRITE,
+                        PosixFilePermission.OWNER_EXECUTE));
     }
 
     private boolean isWebhook(ContainerRequestContext requestContext) {

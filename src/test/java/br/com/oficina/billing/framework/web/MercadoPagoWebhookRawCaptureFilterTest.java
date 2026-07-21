@@ -75,14 +75,17 @@ class MercadoPagoWebhookRawCaptureFilterTest {
 
     @Test
     void deveRecusarAtivacaoForaDeLabOuTest() {
+        var objectMapper = new ObjectMapper();
+        var prodPath = tempDir.resolve("prod.json");
+        var localPath = tempDir.resolve("local.json");
         assertThrows(
                 IllegalStateException.class,
                 () -> new MercadoPagoWebhookRawCaptureFilter(
-                        true, "prod", tempDir.resolve("prod.json"), new ObjectMapper(), CLOCK));
+                        true, "prod", prodPath, objectMapper, CLOCK));
         assertThrows(
                 IllegalStateException.class,
                 () -> new MercadoPagoWebhookRawCaptureFilter(
-                        true, "local", tempDir.resolve("local.json"), new ObjectMapper(), CLOCK));
+                        true, "local", localPath, objectMapper, CLOCK));
     }
 
     private ContainerRequestContext context(String body) {
