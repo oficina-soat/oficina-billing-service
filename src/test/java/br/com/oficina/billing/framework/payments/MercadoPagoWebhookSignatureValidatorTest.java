@@ -146,9 +146,11 @@ class MercadoPagoWebhookSignatureValidatorTest {
     void deveIdentificarManifestoAlternativoSemAceitarAssinatura() throws Exception {
         var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
         var dataId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
-        var requestId = "request-orders-alternative";
+        var requestId = "REQUEST-Orders-Alternative";
         var lowercaseHash = signature(dataId.toLowerCase(java.util.Locale.ROOT), requestId);
         var withoutDataIdHash = signature(null, requestId);
+        var lowercaseRequestIdHash = signature(dataId, requestId.toLowerCase(java.util.Locale.ROOT));
+        var withoutRequestIdHash = signatureWithoutRequestId(dataId, TIMESTAMP);
 
         assertEquals(
                 "lowercase_data_id",
@@ -156,6 +158,12 @@ class MercadoPagoWebhookSignatureValidatorTest {
         assertEquals(
                 "without_data_id",
                 validator.alternativeManifestMatch(withoutDataIdHash, requestId, dataId, TIMESTAMP));
+        assertEquals(
+                "lowercase_request_id",
+                validator.alternativeManifestMatch(lowercaseRequestIdHash, requestId, dataId, TIMESTAMP));
+        assertEquals(
+                "without_request_id",
+                validator.alternativeManifestMatch(withoutRequestIdHash, requestId, dataId, TIMESTAMP));
         assertEquals(
                 "none",
                 validator.alternativeManifestMatch("hash-incompativel", requestId, dataId, TIMESTAMP));
@@ -175,5 +183,12 @@ class MercadoPagoWebhookSignatureValidatorTest {
         var mac = Mac.getInstance("HmacSHA256");
         mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
         return HexFormat.of().formatHex(mac.doFinal(manifest.toString().getBytes(StandardCharsets.UTF_8)));
+    }
+
+    private String signatureWithoutRequestId(String dataId, long timestamp) throws Exception {
+        var manifest = "id:" + dataId + ";ts:" + timestamp + ";";
+        var mac = Mac.getInstance("HmacSHA256");
+        mac.init(new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+        return HexFormat.of().formatHex(mac.doFinal(manifest.getBytes(StandardCharsets.UTF_8)));
     }
 }

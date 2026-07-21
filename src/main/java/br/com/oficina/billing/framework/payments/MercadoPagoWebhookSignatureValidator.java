@@ -130,14 +130,33 @@ public class MercadoPagoWebhookSignatureValidator {
     }
 
     String alternativeManifestMatch(String suppliedHash, String requestId, String dataId, long timestamp) {
+        var lowercaseRequestId = requestId == null ? null : requestId.toLowerCase(Locale.ROOT);
+        if (lowercaseRequestId != null
+                && !lowercaseRequestId.equals(requestId)
+                && matches(suppliedHash, manifest(dataId, lowercaseRequestId, timestamp))) {
+            return "lowercase_request_id";
+        }
         if (dataId != null && !dataId.isBlank()) {
             var lowercaseDataId = dataId.toLowerCase(Locale.ROOT);
             if (!lowercaseDataId.equals(dataId)
                     && matches(suppliedHash, manifest(lowercaseDataId, requestId, timestamp))) {
                 return "lowercase_data_id";
             }
+            if (!lowercaseDataId.equals(dataId)
+                    && lowercaseRequestId != null
+                    && !lowercaseRequestId.equals(requestId)
+                    && matches(suppliedHash, manifest(lowercaseDataId, lowercaseRequestId, timestamp))) {
+                return "lowercase_data_and_request_id";
+            }
             if (matches(suppliedHash, manifest(null, requestId, timestamp))) {
                 return "without_data_id";
+            }
+            if (matches(suppliedHash, manifestWithoutRequestId(dataId, timestamp))) {
+                return "without_request_id";
+            }
+            if (!lowercaseDataId.equals(dataId)
+                    && matches(suppliedHash, manifestWithoutRequestId(lowercaseDataId, timestamp))) {
+                return "lowercase_data_without_request_id";
             }
         }
         var trimmedRequestId = requestId == null ? null : requestId.trim();
@@ -167,6 +186,14 @@ public class MercadoPagoWebhookSignatureValidator {
                 .append(timestamp)
                 .append(';')
                 .toString();
+    }
+
+    private String manifestWithoutRequestId(String dataId, long timestamp) {
+        var manifest = new StringBuilder();
+        if (dataId != null && !dataId.isBlank()) {
+            manifest.append("id:").append(dataId).append(';');
+        }
+        return manifest.append("ts:").append(timestamp).append(';').toString();
     }
 
     private void auditHashMismatch(
