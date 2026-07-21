@@ -240,6 +240,8 @@ A integração com Mercado Pago é opcional e fica desabilitada por padrão. Qua
 
 No `lab`, o cenário automático usa `OFICINA_MERCADO_PAGO_PAYER_EMAIL=test_user_br@testuser.com` e `OFICINA_MERCADO_PAGO_PAYER_FIRST_NAME=APRO`. O startup rejeita `APRO` fora de `lab` ou `test`; produção não pode conter esse marcador.
 
+Excepcionalmente durante o diagnóstico do `hash_mismatch`, `OFICINA_MERCADO_PAGO_WEBHOOK_RAW_CAPTURE_ENABLED=true` captura a primeira requisição do webhook em `/tmp/mercado-pago-webhook-request.json`, incluindo URI, query string, headers e corpo brutos. A opção é desabilitada por padrão e o startup a rejeita fora de `lab` ou `test`; o arquivo é efêmero, limitado a 1 MiB, criado uma única vez e protegido com modo `0600`. O procedimento autorizado deve ler uma única evidência, apagar imediatamente o arquivo, remover a variável do deployment e confirmar o novo rollout. A classe, a configuração e esta orientação são instrumentação temporária e devem ser removidas na primeira versão posterior à conclusão do diagnóstico.
+
 Antes da chamada externa, o Billing reivindica no PostgreSQL um claim com lease por `orcamentoId`. Somente o proprietário chama o provedor; consumidores concorrentes aguardam o pagamento persistido e reutilizam a mesma Outbox idempotente. Falha do proprietário libera o claim para takeover por outro consumidor, mas continua retentável quando não existe concorrente que conclua o pagamento. Os timeouts padrão de conexão e leitura são, respectivamente, 3 e 10 segundos, inferiores ao lease de 30 segundos.
 
 Mapeamento de status de Orders:
@@ -277,6 +279,7 @@ As tentativas de integração expõem as métricas `payment.provider.enabled`, `
 - `OFICINA_MERCADO_PAGO_ENABLED`
 - `OFICINA_MERCADO_PAGO_ACCESS_TOKEN`
 - `OFICINA_MERCADO_PAGO_WEBHOOK_SECRET`
+- `OFICINA_MERCADO_PAGO_WEBHOOK_RAW_CAPTURE_ENABLED` (temporária; somente `lab`/`test`)
 - `OFICINA_MERCADO_PAGO_API_MODE`
 - `OFICINA_MERCADO_PAGO_PAYER_EMAIL`
 - `OFICINA_MERCADO_PAGO_PAYER_FIRST_NAME`
