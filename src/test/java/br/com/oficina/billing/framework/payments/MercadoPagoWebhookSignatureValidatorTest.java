@@ -142,6 +142,26 @@ class MercadoPagoWebhookSignatureValidatorTest {
         assertFalse(serialized.contains("segredo-injetado"));
     }
 
+    @Test
+    void deveIdentificarManifestoAlternativoSemAceitarAssinatura() throws Exception {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
+        var dataId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        var requestId = "request-orders-alternative";
+        var lowercaseHash = signature(dataId.toLowerCase(java.util.Locale.ROOT), requestId);
+        var withoutDataIdHash = signature(null, requestId);
+
+        assertEquals(
+                "lowercase_data_id",
+                validator.alternativeManifestMatch(lowercaseHash, requestId, dataId, TIMESTAMP));
+        assertEquals(
+                "without_data_id",
+                validator.alternativeManifestMatch(withoutDataIdHash, requestId, dataId, TIMESTAMP));
+        assertEquals(
+                "none",
+                validator.alternativeManifestMatch("hash-incompativel", requestId, dataId, TIMESTAMP));
+        assertFalse(validator.isValid("ts=" + TIMESTAMP + ",v1=" + lowercaseHash, requestId, dataId));
+    }
+
     private String signature(String dataId, String requestId) throws Exception {
         return signature(dataId, requestId, TIMESTAMP);
     }
