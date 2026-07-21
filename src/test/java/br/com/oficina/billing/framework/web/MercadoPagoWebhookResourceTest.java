@@ -22,6 +22,21 @@ import org.junit.jupiter.api.Test;
 
 class MercadoPagoWebhookResourceTest {
     @Test
+    void deveClassificarRelacaoEntreIdsDaQueryEDoCorpoSemExporValores() {
+        var resource = new MercadoPagoWebhookResource(
+                mock(PagamentoController.class),
+                mock(MercadoPagoWebhookSignatureValidator.class));
+        var body = new MercadoPagoWebhookResource.WebhookRequest(
+                "order", new MercadoPagoWebhookResource.WebhookRequest.Data("order-1"));
+
+        assertEquals("query_body_equal", resource.queryBodyDataIdRelation("order-1", body));
+        assertEquals("query_body_different", resource.queryBodyDataIdRelation("order-2", body));
+        assertEquals("query_missing", resource.queryBodyDataIdRelation(null, body));
+        assertEquals("body_missing", resource.queryBodyDataIdRelation("order-1", null));
+        assertEquals("both_missing", resource.queryBodyDataIdRelation(null, null));
+    }
+
+    @Test
     void deveClassificarFormatoDaQuerySemRegistrarSeuConteudo() {
         var resource = new MercadoPagoWebhookResource(
                 mock(PagamentoController.class),

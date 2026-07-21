@@ -130,23 +130,63 @@ public class MercadoPagoWebhookSignatureValidator {
     }
 
     String alternativeManifestMatch(String suppliedHash, String requestId, String dataId, long timestamp) {
-        if (dataId != null && !dataId.isBlank()) {
-            var lowercaseDataId = dataId.toLowerCase(Locale.ROOT);
-            if (!lowercaseDataId.equals(dataId)
-                    && matches(suppliedHash, manifest(lowercaseDataId, requestId, timestamp))) {
-                return "lowercase_data_id";
-            }
-            if (matches(suppliedHash, manifest(null, requestId, timestamp))) {
-                return "without_data_id";
-            }
+        var requestIdMatch = requestIdAlternativeMatch(suppliedHash, requestId, dataId, timestamp);
+        if (requestIdMatch != null) {
+            return requestIdMatch;
         }
+        var dataIdMatch = dataIdAlternativeMatch(suppliedHash, requestId, dataId, timestamp);
+        if (dataIdMatch != null) {
+            return dataIdMatch;
+        }
+        return trimmedRequestIdMatch(suppliedHash, requestId, dataId, timestamp)
+                ? "trimmed_request_id"
+                : "none";
+    }
+
+    private String requestIdAlternativeMatch(String suppliedHash, String requestId, String dataId, long timestamp) {
+        var lowercaseRequestId = requestId == null ? null : requestId.toLowerCase(Locale.ROOT);
+        if (lowercaseRequestId != null
+                && !lowercaseRequestId.equals(requestId)
+                && matches(suppliedHash, manifest(dataId, lowercaseRequestId, timestamp))) {
+            return "lowercase_request_id";
+        }
+        return null;
+    }
+
+    private String dataIdAlternativeMatch(String suppliedHash, String requestId, String dataId, long timestamp) {
+        if (dataId == null || dataId.isBlank()) {
+            return null;
+        }
+        var lowercaseDataId = dataId.toLowerCase(Locale.ROOT);
+        if (!lowercaseDataId.equals(dataId)
+                && matches(suppliedHash, manifest(lowercaseDataId, requestId, timestamp))) {
+            return "lowercase_data_id";
+        }
+        var lowercaseRequestId = requestId == null ? null : requestId.toLowerCase(Locale.ROOT);
+        if (!lowercaseDataId.equals(dataId)
+                && lowercaseRequestId != null
+                && !lowercaseRequestId.equals(requestId)
+                && matches(suppliedHash, manifest(lowercaseDataId, lowercaseRequestId, timestamp))) {
+            return "lowercase_data_and_request_id";
+        }
+        if (matches(suppliedHash, manifest(null, requestId, timestamp))) {
+            return "without_data_id";
+        }
+        if (matches(suppliedHash, manifestWithoutRequestId(dataId, timestamp))) {
+            return "without_request_id";
+        }
+        if (!lowercaseDataId.equals(dataId)
+                && matches(suppliedHash, manifestWithoutRequestId(lowercaseDataId, timestamp))) {
+            return "lowercase_data_without_request_id";
+        }
+        return null;
+    }
+
+    private boolean trimmedRequestIdMatch(String suppliedHash, String requestId, String dataId, long timestamp) {
         var trimmedRequestId = requestId == null ? null : requestId.trim();
-        if (trimmedRequestId != null
+        return trimmedRequestId != null
                 && !trimmedRequestId.equals(requestId)
-                && matches(suppliedHash, manifest(dataId, trimmedRequestId, timestamp))) {
-            return "trimmed_request_id";
-        }
-        return "none";
+                && matches(suppliedHash, manifest(dataId, trimmedRequestId, timestamp));
     }
 
     private boolean matches(String suppliedHash, String candidateManifest) {
@@ -167,6 +207,14 @@ public class MercadoPagoWebhookSignatureValidator {
                 .append(timestamp)
                 .append(';')
                 .toString();
+    }
+
+    private String manifestWithoutRequestId(String dataId, long timestamp) {
+        var manifest = new StringBuilder();
+        if (dataId != null && !dataId.isBlank()) {
+            manifest.append("id:").append(dataId).append(';');
+        }
+        return manifest.append("ts:").append(timestamp).append(';').toString();
     }
 
     private void auditHashMismatch(

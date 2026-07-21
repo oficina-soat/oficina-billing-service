@@ -79,7 +79,19 @@ public class MercadoPagoWebhookResource {
         fields.put("webhookQueryDataIdFormat", queryDataIdFormat());
         fields.put("webhookQueryParameterCount", uriInfo == null ? -1 : uriInfo.getQueryParameters().size());
         fields.put("webhookBodyDataPresent", request != null && request.data() != null);
+        fields.put("webhookQueryBodyDataIdRelation", queryBodyDataIdRelation(queryDataId, request));
         StructuredLog.info(LOG, "mercado pago webhook request shape received", fields);
+    }
+
+    String queryBodyDataIdRelation(String queryDataId, WebhookRequest request) {
+        var bodyDataId = request == null || request.data() == null ? null : request.data().id();
+        if (queryDataId == null || queryDataId.isBlank()) {
+            return bodyDataId == null || bodyDataId.isBlank() ? "both_missing" : "query_missing";
+        }
+        if (bodyDataId == null || bodyDataId.isBlank()) {
+            return "body_missing";
+        }
+        return queryDataId.equals(bodyDataId) ? "query_body_equal" : "query_body_different";
     }
 
     String queryDataIdFormat() {
