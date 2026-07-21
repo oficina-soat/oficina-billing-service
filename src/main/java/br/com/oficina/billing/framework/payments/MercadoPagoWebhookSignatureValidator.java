@@ -72,25 +72,23 @@ public class MercadoPagoWebhookSignatureValidator {
         if (expired(timestamp)) {
             return reject("timestamp_expired", requestId, dataId, timestamp, null, components);
         }
-        var manifest = new StringBuilder();
-        if (dataId != null && !dataId.isBlank()) {
-            manifest.append("id:")
-                    .append(dataId)
-                    .append(';');
-        }
-        manifest.append("request-id:")
-                .append(requestId)
-                .append(";ts:")
-                .append(timestamp)
-                .append(';');
-        var expectedHash = hmac(manifest.toString());
+        var manifest = manifest(dataId, requestId, timestamp);
+        var expectedHash = hmac(manifest);
         var valid = MessageDigest.isEqual(
                 expectedHash.getBytes(StandardCharsets.US_ASCII),
                 suppliedHash.getBytes(StandardCharsets.US_ASCII));
         if (!valid) {
-            return reject("hash_mismatch", requestId, dataId, timestamp, manifest.toString(), components);
+            var alternativeManifestMatch = alternativeManifestMatch(suppliedHash, requestId, dataId, timestamp);
+            auditHashMismatch(
+                    requestId,
+                    dataId,
+                    timestamp,
+                    manifest,
+                    components,
+                    alternativeManifestMatch);
+            return false;
         }
-        audit("accepted", "hash_comparison", requestId, dataId, timestamp, manifest.toString(), components);
+        audit("accepted", "hash_comparison", requestId, dataId, timestamp, manifest, components);
         return true;
     }
 
@@ -131,6 +129,59 @@ public class MercadoPagoWebhookSignatureValidator {
         }
     }
 
+    String alternativeManifestMatch(String suppliedHash, String requestId, String dataId, long timestamp) {
+        if (dataId != null && !dataId.isBlank()) {
+            var lowercaseDataId = dataId.toLowerCase(Locale.ROOT);
+            if (!lowercaseDataId.equals(dataId)
+                    && matches(suppliedHash, manifest(lowercaseDataId, requestId, timestamp))) {
+                return "lowercase_data_id";
+            }
+            if (matches(suppliedHash, manifest(null, requestId, timestamp))) {
+                return "without_data_id";
+            }
+        }
+        var trimmedRequestId = requestId == null ? null : requestId.trim();
+        if (trimmedRequestId != null
+                && !trimmedRequestId.equals(requestId)
+                && matches(suppliedHash, manifest(dataId, trimmedRequestId, timestamp))) {
+            return "trimmed_request_id";
+        }
+        return "none";
+    }
+
+    private boolean matches(String suppliedHash, String candidateManifest) {
+        var candidateHash = hmac(candidateManifest);
+        return MessageDigest.isEqual(
+                candidateHash.getBytes(StandardCharsets.US_ASCII),
+                suppliedHash.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private String manifest(String dataId, String requestId, long timestamp) {
+        var manifest = new StringBuilder();
+        if (dataId != null && !dataId.isBlank()) {
+            manifest.append("id:").append(dataId).append(';');
+        }
+        return manifest.append("request-id:")
+                .append(requestId)
+                .append(";ts:")
+                .append(timestamp)
+                .append(';')
+                .toString();
+    }
+
+    private void auditHashMismatch(
+            String requestId,
+            String dataId,
+            Long timestamp,
+            String manifest,
+            Map<String, String> signatureComponents,
+            String alternativeManifestMatch) {
+        var fields = new LinkedHashMap<>(diagnosticFields(
+                "rejected", "hash_mismatch", requestId, dataId, timestamp, manifest, signatureComponents));
+        fields.put("webhookAlternativeManifestMatch", alternativeManifestMatch);
+        writeAuditLog("rejected", Map.copyOf(fields));
+    }
+
     private boolean reject(
             String reason,
             String requestId,
@@ -151,6 +202,10 @@ public class MercadoPagoWebhookSignatureValidator {
             String manifest,
             Map<String, String> signatureComponents) {
         var fields = diagnosticFields(result, stage, requestId, dataId, timestamp, manifest, signatureComponents);
+        writeAuditLog(result, fields);
+    }
+
+    private void writeAuditLog(String result, Map<String, Object> fields) {
         StructuredLog.withFields(
                 fields,
                 () -> {
