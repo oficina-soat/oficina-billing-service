@@ -31,19 +31,36 @@ class MercadoPagoWebhookSignatureValidatorTest {
     }
 
     @Test
-    void deveValidarManifestoOrdersPreservandoIdETimestampEmMilissegundos() throws Exception {
+    void deveValidarOrdersComIdAlfanumericoNormalizadoOuLiteralETimestampEmMilissegundos() {
         var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
         var dataId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
         var requestId = "request-orders-1";
         var timestampMillis = TIMESTAMP * 1_000 + 123;
-        var signature = "ts=" + timestampMillis + ",v1="
-                + signature(dataId, requestId, timestampMillis);
-        var signatureWithLowercaseId = "ts=" + timestampMillis + ",v1="
-                + signature(dataId.toLowerCase(java.util.Locale.ROOT), requestId, timestampMillis);
+        var signature = "ts=" + timestampMillis
+                + ",v1=690d8217b26b9071e373887e8bff4ee2e13a74d3adfc5a4c9b5f8ebc19f102ae";
+        var signatureWithLowercaseId = "ts=" + timestampMillis
+                + ",v1=f9edb9c6083a51735349be209e0438e7cb71930d4930a0629e99f56a31556b0d";
 
         assertTrue(validator.isValid(signature, requestId, dataId));
-        assertFalse(validator.isValid(signatureWithLowercaseId, requestId, dataId));
+        assertTrue(validator.isValid(signatureWithLowercaseId, requestId, dataId));
         assertFalse(validator.isValid(signature, requestId, "outra-order"));
+    }
+
+    @Test
+    void deveNormalizarSomenteDataIdAlfanumericoConformeManifestoDocumentado() throws Exception {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK);
+        var requestId = "request-orders-normalization";
+        var uppercaseAlphanumericId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        var idWithSeparator = "ORDER-ABC-123";
+        var normalizedSignature = "ts=" + TIMESTAMP + ",v1="
+                + signature(uppercaseAlphanumericId.toLowerCase(java.util.Locale.ROOT), requestId);
+        var incorrectlyNormalizedSignature = "ts=" + TIMESTAMP + ",v1="
+                + signature(idWithSeparator.toLowerCase(java.util.Locale.ROOT), requestId);
+        var literalSignature = "ts=" + TIMESTAMP + ",v1=" + signature(idWithSeparator, requestId);
+
+        assertTrue(validator.isValid(normalizedSignature, requestId, uppercaseAlphanumericId));
+        assertFalse(validator.isValid(incorrectlyNormalizedSignature, requestId, idWithSeparator));
+        assertTrue(validator.isValid(literalSignature, requestId, idWithSeparator));
     }
 
     @Test
@@ -183,7 +200,7 @@ class MercadoPagoWebhookSignatureValidatorTest {
         assertEquals(
                 "none",
                 validator.alternativeManifestMatch("hash-incompativel", requestId, dataId, TIMESTAMP));
-        assertFalse(validator.isValid("ts=" + TIMESTAMP + ",v1=" + lowercaseHash, requestId, dataId));
+        assertTrue(validator.isValid("ts=" + TIMESTAMP + ",v1=" + lowercaseHash, requestId, dataId));
     }
 
     private String signature(String dataId, String requestId) throws Exception {
