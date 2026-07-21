@@ -245,4 +245,31 @@ class MercadoPagoWebhookResourceTest {
                                 "order",
                                 request.data())));
     }
+
+    @Test
+    void devePreservarCaixaDoDataIdEntreQueryValidacaoEConsultaDaOrder() {
+        var controller = mock(PagamentoController.class);
+        var validator = mock(MercadoPagoWebhookSignatureValidator.class);
+        var orderId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        when(validator.isValid("signature", "request-orders-case", orderId)).thenReturn(true);
+        when(controller.reconciliarPagamentoPorTransacao(orderId, TipoReferenciaExternaPagamento.ORDER))
+                .thenReturn(CompletableFuture.completedFuture(mock(Pagamento.class)));
+        var resource = new MercadoPagoWebhookResource(controller, validator);
+        var request = new MercadoPagoWebhookResource.WebhookRequest(
+                "order.processed",
+                "order",
+                new MercadoPagoWebhookResource.WebhookRequest.Data(orderId));
+
+        var response = resource.receber(
+                        "signature",
+                        "request-orders-case",
+                        orderId,
+                        "order",
+                        request)
+                .await().indefinitely();
+
+        assertEquals(200, response.getStatus());
+        verify(validator).isValid("signature", "request-orders-case", orderId);
+        verify(controller).reconciliarPagamentoPorTransacao(orderId, TipoReferenciaExternaPagamento.ORDER);
+    }
 }

@@ -72,11 +72,16 @@ public class MercadoPagoWebhookSignatureValidator {
         if (expired(timestamp)) {
             return reject("timestamp_expired", requestId, dataId, timestamp, null, components);
         }
-        var manifest = manifest(dataId, requestId, timestamp);
-        var expectedHash = hmac(manifest);
-        var valid = MessageDigest.isEqual(
-                expectedHash.getBytes(StandardCharsets.US_ASCII),
-                suppliedHash.getBytes(StandardCharsets.US_ASCII));
+        var normalizedDataId = normalizedDataId(dataId);
+        var manifest = manifest(normalizedDataId, requestId, timestamp);
+        var valid = matches(suppliedHash, manifest);
+        if (!valid && !java.util.Objects.equals(normalizedDataId, dataId)) {
+            var literalManifest = manifest(dataId, requestId, timestamp);
+            valid = matches(suppliedHash, literalManifest);
+            if (valid) {
+                manifest = literalManifest;
+            }
+        }
         if (!valid) {
             var alternativeManifestMatch = alternativeManifestMatch(suppliedHash, requestId, dataId, timestamp);
             auditHashMismatch(
@@ -194,6 +199,15 @@ public class MercadoPagoWebhookSignatureValidator {
         return MessageDigest.isEqual(
                 candidateHash.getBytes(StandardCharsets.US_ASCII),
                 suppliedHash.getBytes(StandardCharsets.US_ASCII));
+    }
+
+    private String normalizedDataId(String dataId) {
+        if (dataId == null || dataId.isBlank()) {
+            return dataId;
+        }
+        return dataId.matches("[A-Za-z0-9]+")
+                ? dataId.toLowerCase(Locale.ROOT)
+                : dataId;
     }
 
     private String manifest(String dataId, String requestId, long timestamp) {
