@@ -4,6 +4,7 @@ import static br.com.oficina.billing.framework.web.ResourceUniAdapter.toUni;
 
 import br.com.oficina.billing.core.entities.TipoReferenciaExternaPagamento;
 import br.com.oficina.billing.core.exceptions.ResourceNotFoundException;
+import br.com.oficina.billing.framework.observability.StructuredLog;
 import br.com.oficina.billing.framework.payments.MercadoPagoWebhookSignatureValidator;
 import br.com.oficina.billing.interfaces.controllers.PagamentoController;
 import io.smallrye.common.annotation.Blocking;
@@ -17,8 +18,13 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
+import java.util.LinkedHashMap;
+import java.util.Locale;
+import org.jboss.logging.Logger;
 
 @Path("/api/v1/integracoes/mercado-pago/webhooks")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -26,8 +32,13 @@ import jakarta.ws.rs.core.Response;
 @Blocking
 @PermitAll
 public class MercadoPagoWebhookResource {
+    private static final Logger LOG = Logger.getLogger(MercadoPagoWebhookResource.class);
+
     private final PagamentoController pagamentoController;
     private final MercadoPagoWebhookSignatureValidator signatureValidator;
+
+    @Context
+    UriInfo uriInfo;
 
     public MercadoPagoWebhookResource(
             PagamentoController pagamentoController,
@@ -44,6 +55,7 @@ public class MercadoPagoWebhookResource {
             @QueryParam("type") String queryType,
             WebhookRequest request) {
         var dataId = dataId(queryDataId, request);
+        auditRequestShape(queryDataId, queryType, request);
         if (!signatureValidator.isValid(signature, requestId, dataId)) {
             throw new NotAuthorizedException("Assinatura invalida do webhook do Mercado Pago.");
         }
@@ -58,6 +70,40 @@ public class MercadoPagoWebhookResource {
                 .thenApply(ignored -> Response.ok().build()))
                 .onFailure(ResourceNotFoundException.class)
                 .recoverWithItem(Response.ok().build());
+    }
+
+    private void auditRequestShape(String queryDataId, String queryType, WebhookRequest request) {
+        var fields = new LinkedHashMap<String, Object>();
+        fields.put("webhookDataIdSource", queryDataId == null || queryDataId.isBlank() ? "body" : "query");
+        fields.put("webhookTypeSource", queryType == null || queryType.isBlank() ? "body" : "query");
+        fields.put("webhookQueryDataIdFormat", queryDataIdFormat());
+        fields.put("webhookQueryParameterCount", uriInfo == null ? -1 : uriInfo.getQueryParameters().size());
+        fields.put("webhookBodyDataPresent", request != null && request.data() != null);
+        StructuredLog.info(LOG, "mercado pago webhook request shape received", fields);
+    }
+
+    String queryDataIdFormat() {
+        if (uriInfo == null || uriInfo.getRequestUri() == null) {
+            return "unavailable";
+        }
+        var rawQuery = uriInfo.getRequestUri().getRawQuery();
+        if (rawQuery == null || rawQuery.isBlank()) {
+            return "absent";
+        }
+        var normalized = rawQuery.toLowerCase(Locale.ROOT);
+        if (normalized.contains("data.id=")) {
+            return "data_dot_id";
+        }
+        if (normalized.contains("data%2eid=")) {
+            return "data_encoded_dot_id";
+        }
+        if (normalized.contains("data_id=")) {
+            return "data_underscore_id";
+        }
+        if (normalized.contains("id=")) {
+            return "id";
+        }
+        return "other";
     }
 
     private String dataId(String queryDataId, WebhookRequest request) {

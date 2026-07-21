@@ -15,10 +15,25 @@ import br.com.oficina.billing.framework.payments.MercadoPagoWebhookSignatureVali
 import br.com.oficina.billing.interfaces.controllers.PagamentoController;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotAuthorizedException;
+import jakarta.ws.rs.core.UriInfo;
+import java.net.URI;
 import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 
 class MercadoPagoWebhookResourceTest {
+    @Test
+    void deveClassificarFormatoDaQuerySemRegistrarSeuConteudo() {
+        var resource = new MercadoPagoWebhookResource(
+                mock(PagamentoController.class),
+                mock(MercadoPagoWebhookSignatureValidator.class));
+        var uriInfo = mock(UriInfo.class);
+        resource.uriInfo = uriInfo;
+        when(uriInfo.getRequestUri()).thenReturn(URI.create(
+                "https://lab.example/api/v1/integracoes/mercado-pago/webhooks?data%2Eid=ORD-NAO-LOGAR&type=order"));
+
+        assertEquals("data_encoded_dot_id", resource.queryDataIdFormat());
+    }
+
     @Test
     void deveValidarAssinaturaEReconciliarPagamento() {
         var controller = mock(PagamentoController.class);

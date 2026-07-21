@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>br.com.oficina</groupId>
     <artifactId>oficina-billing-service</artifactId>
-    <version>1.10.7</version>
+    <version>1.10.8</version>
 
     <properties>
         <mockito.version>5.21.0</mockito.version>

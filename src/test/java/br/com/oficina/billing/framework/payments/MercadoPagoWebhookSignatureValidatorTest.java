@@ -1,5 +1,6 @@
 package br.com.oficina.billing.framework.payments;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -8,6 +9,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
+import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.junit.jupiter.api.Test;
@@ -112,6 +114,32 @@ class MercadoPagoWebhookSignatureValidatorTest {
                 .isValid(duplicateTimestamp, requestId, dataId));
         assertFalse(new MercadoPagoWebhookSignatureValidator(SECRET, 0, CLOCK)
                 .isValid("ts=" + TIMESTAMP + ",v1=" + hash, requestId, dataId));
+    }
+
+    @Test
+    void deveSanitizarDiagnosticoSemExporEntradasOuComponenteDesconhecido() {
+        var validator = new MercadoPagoWebhookSignatureValidator(SECRET, 300, CLOCK, "lab");
+        var requestId = "request-id-sensivel";
+        var dataId = "ORD01JQ4S4KY8HWQ6NA5PXB65B3D3";
+        var manifest = "id:" + dataId + ";request-id:" + requestId + ";ts:" + TIMESTAMP + ";";
+
+        var fields = validator.diagnosticFields(
+                "rejected",
+                "hash_mismatch",
+                requestId,
+                dataId,
+                TIMESTAMP,
+                manifest,
+                Map.of("ts", Long.toString(TIMESTAMP), "v1", "hash", "segredo-injetado", "valor"));
+        var serialized = fields.toString();
+
+        assertEquals("lab", fields.get("webhookEnvironment"));
+        assertEquals("ts,v1", fields.get("webhookSignatureComponentNames"));
+        assertEquals("uppercase_alphanumeric", fields.get("webhookDataIdFormat"));
+        assertFalse(serialized.contains(requestId));
+        assertFalse(serialized.contains(dataId));
+        assertFalse(serialized.contains(manifest));
+        assertFalse(serialized.contains("segredo-injetado"));
     }
 
     private String signature(String dataId, String requestId) throws Exception {
