@@ -83,7 +83,7 @@ public class MercadoPagoWebhookResource {
         StructuredLog.info(LOG, "mercado pago webhook request shape received", fields);
     }
 
-    private String queryBodyDataIdRelation(String queryDataId, WebhookRequest request) {
+    String queryBodyDataIdRelation(String queryDataId, WebhookRequest request) {
         var bodyDataId = request == null || request.data() == null ? null : request.data().id();
         if (queryDataId == null || queryDataId.isBlank()) {
             return bodyDataId == null || bodyDataId.isBlank() ? "both_missing" : "query_missing";

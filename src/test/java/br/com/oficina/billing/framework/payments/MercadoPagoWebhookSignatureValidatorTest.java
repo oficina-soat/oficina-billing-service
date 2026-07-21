@@ -151,6 +151,13 @@ class MercadoPagoWebhookSignatureValidatorTest {
         var withoutDataIdHash = signature(null, requestId);
         var lowercaseRequestIdHash = signature(dataId, requestId.toLowerCase(java.util.Locale.ROOT));
         var withoutRequestIdHash = signatureWithoutRequestId(dataId, TIMESTAMP);
+        var lowercaseDataAndRequestIdHash = signature(
+                dataId.toLowerCase(java.util.Locale.ROOT),
+                requestId.toLowerCase(java.util.Locale.ROOT));
+        var lowercaseDataWithoutRequestIdHash = signatureWithoutRequestId(
+                dataId.toLowerCase(java.util.Locale.ROOT), TIMESTAMP);
+        var requestIdWithSpaces = "  " + requestId + "  ";
+        var trimmedRequestIdHash = signature(dataId, requestId);
 
         assertEquals(
                 "lowercase_data_id",
@@ -164,6 +171,15 @@ class MercadoPagoWebhookSignatureValidatorTest {
         assertEquals(
                 "without_request_id",
                 validator.alternativeManifestMatch(withoutRequestIdHash, requestId, dataId, TIMESTAMP));
+        assertEquals(
+                "lowercase_data_and_request_id",
+                validator.alternativeManifestMatch(lowercaseDataAndRequestIdHash, requestId, dataId, TIMESTAMP));
+        assertEquals(
+                "lowercase_data_without_request_id",
+                validator.alternativeManifestMatch(lowercaseDataWithoutRequestIdHash, requestId, dataId, TIMESTAMP));
+        assertEquals(
+                "trimmed_request_id",
+                validator.alternativeManifestMatch(trimmedRequestIdHash, requestIdWithSpaces, dataId, TIMESTAMP));
         assertEquals(
                 "none",
                 validator.alternativeManifestMatch("hash-incompativel", requestId, dataId, TIMESTAMP));
