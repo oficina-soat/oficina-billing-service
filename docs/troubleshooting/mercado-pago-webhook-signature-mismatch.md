@@ -37,12 +37,41 @@ id:ordtst01ky4mvyrjrns2z8jwd8j5zeee;request-id:3d9bde19-23b6-4e24-92b2-df4712208
 
 ## Tentativa 2 — nova chave
 
-Pendente de rotação do segredo e repetição do mesmo fluxo. A captura temporária permanece habilitada no ambiente local de teste até esta seção ser preenchida.
+- Data da captura: `2026-07-22T10:17:51.280684333Z`
+- Fingerprint SHA-256 do segredo: `25e9adc48fa027931699e5d42ef4d4dceff387df68928f80fe9926e254f0b941`
+- Resultado HTTP devolvido pelo Billing: `401 Unauthorized`
+- Motivo registrado: `hash_mismatch`
+- Ambiente do Billing: `test`
+- `live_mode` da notificação: `false`
+- `application_id`: `8137145073096167`
+- Ação: `order.action_required`
+- `data.id` recebido: `ORDTST01KY4NAK01FNK2CJHB11QM1W6X`
+- `data.external_reference`: `a5a352a1-742e-4cd9-ab91-c3f9d4f2bb7f`
+- `x-request-id`: `23482c4e-5449-471d-8b7b-9131d62a8612`
+- `x-signature`: `ts=1784715497,v1=b8c6d1ac9e2f844ce043a497d69bfd006b6761a720c14167d83c6d7d1427ffc4`
 
-## Conclusão provisória
+### Cálculo conforme o exemplo oficial
 
-A requisição chegou diretamente ao endpoint configurado, contendo todos os componentes exigidos para o manifesto. Na primeira tentativa, a implementação reproduziu o algoritmo documentado, mas o hash recebido não corresponde ao segredo configurado no Billing. A segunda tentativa permitirá distinguir uma chave desatualizada de uma divergência persistente entre a assinatura produzida pelo Mercado Pago e o segredo exibido para a aplicação.
+```text
+id:ordtst01ky4nak01fnk2cjhb11qm1w6x;request-id:23482c4e-5449-471d-8b7b-9131d62a8612;ts:1784715497;
+```
 
-## Encerramento obrigatório
+- HMAC-SHA256 calculado: `6b4194c5ef5bbcb07504c0c8c42532e55828dd873714a34df5bcc24a3763d749`
+- HMAC-SHA256 recebido em `v1`: `b8c6d1ac9e2f844ce043a497d69bfd006b6761a720c14167d83c6d7d1427ffc4`
+- Comparação em tempo constante: `false`
 
-Após a segunda tentativa, remover a classe de captura, seu teste, a propriedade `OFICINA_MERCADO_PAGO_WEBHOOK_RAW_CAPTURE_ENABLED`, a entrada em `.gitignore` e esta orientação temporária do README. O arquivo bruto em `.oficina-diagnostics/` também deve ser apagado.
+### Corpo recebido
+
+```json
+{"action":"order.action_required","api_version":"v1","application_id":"8137145073096167","data":{"currency_id":"BRL","external_reference":"a5a352a1-742e-4cd9-ab91-c3f9d4f2bb7f","id":"ORDTST01KY4NAK01FNK2CJHB11QM1W6X","status":"action_required","status_detail":"waiting_transfer","total_amount":"1.00","total_paid_amount":"1.00","transactions":{"payments":[{"amount":"1.00","id":"PAY01KY4NAK0T382TV5T5TT586FCH","payment_method":{"id":"pix","installments":0,"type":"bank_transfer"},"reference":{"id":"000dv7ime5"},"status":"action_required","status_detail":"waiting_transfer"}]},"type":"online","version":1},"date_created":"2026-07-22T10:18:17.50725864Z","live_mode":false,"type":"order","user_id":"3535715534"}
+```
+
+## Conclusão
+
+A requisição chegou ao endpoint configurado nas duas tentativas, contendo todos os componentes exigidos para o manifesto. Em ambas, a implementação reproduziu o algoritmo documentado e converteu o `data.id` para minúsculas, mas o hash recebido não correspondeu ao segredo configurado no Billing.
+
+Os fingerprints comprovam que segredos diferentes foram efetivamente carregados nas tentativas. A persistência de `hash_mismatch` após a rotação afasta a hipótese de cache local ou reutilização acidental da primeira chave e indica divergência entre o segredo exibido para a aplicação e a chave usada pelo Mercado Pago para assinar notificações reais de Orders.
+
+## Encerramento da instrumentação
+
+A captura bruta foi removida após a segunda tentativa. O comportamento normal permanece restrito aos logs estruturados sem headers, identificadores, assinatura, corpo ou segredo.

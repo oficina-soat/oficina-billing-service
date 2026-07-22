@@ -13,7 +13,6 @@ oficina.mercado-pago.enabled=${OFICINA_MERCADO_PAGO_ENABLED:false}
 oficina.mercado-pago.access-token=${OFICINA_MERCADO_PAGO_ACCESS_TOKEN:}
 oficina.mercado-pago.webhook-secret=${OFICINA_MERCADO_PAGO_WEBHOOK_SECRET:}
 oficina.mercado-pago.webhook-tolerance-seconds=${OFICINA_MERCADO_PAGO_WEBHOOK_TOLERANCE_SECONDS:300}
-oficina.mercado-pago.webhook-raw-capture-enabled=${OFICINA_MERCADO_PAGO_WEBHOOK_RAW_CAPTURE_ENABLED:false}
 oficina.mercado-pago.api-mode=${OFICINA_MERCADO_PAGO_API_MODE:orders}
 oficina.mercado-pago.payer-email=${OFICINA_MERCADO_PAGO_PAYER_EMAIL:cliente.local@oficina.com}
 oficina.mercado-pago.payer-first-name=${OFICINA_MERCADO_PAGO_PAYER_FIRST_NAME:}
