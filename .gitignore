@@ -2,3 +2,5 @@ target/
 .idea/
 *.iml
 *.log
+.oficina-diagnostics/
+.env.mercado-pago.local
