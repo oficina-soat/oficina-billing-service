@@ -75,6 +75,61 @@ flowchart LR
 
 O Mercado Pago é uma integração externa síncrona: sua resposta é mapeada para o domínio antes que a transação local e a Outbox produzam eventos internos. O Billing não altera diretamente o estado global da OS; essa autoridade permanece no orquestrador.
 
+## Fluxos financeiros
+
+### Orçamento e decisão de uso único
+
+```mermaid
+sequenceDiagram
+  participant EX as Execution
+  participant OS as OS / Saga
+  participant BI as Billing
+  participant AU as Auth / notificação
+  actor C as Cliente
+  EX-->>BI: diagnosticoFinalizado com itens consolidados
+  BI->>BI: gera orçamento e armazena hash da capability
+  BI-->>AU: solicita notificação
+  AU-->>C: link unificado
+  C->>BI: consulta orçamento completo
+  alt decisão válida
+    C->>BI: aprovar ou recusar
+    BI->>BI: consome capability atomicamente
+    BI-->>OS: orcamentoAprovado ou orcamentoRecusado
+  else expirado, substituído ou reutilizado
+    BI-->>C: erro canônico sem nova decisão
+  end
+```
+
+### Pagamento e liberação da entrega
+
+```mermaid
+sequenceDiagram
+  participant OS as OS / Saga
+  participant BI as Billing
+  participant MP as Mercado Pago
+  OS-->>BI: ordemDeServicoFinalizada
+  BI->>MP: cria cobrança Pix
+  MP-->>BI: identificador e QR Code
+  alt webhook válido
+    MP-->>BI: pagamento aprovado
+    BI->>BI: persiste confirmação e Outbox
+    BI-->>OS: pagamentoConfirmado
+  else reconciliação solicitada
+    BI->>MP: consulta cobrança
+    MP-->>BI: situação aprovada
+    BI->>BI: persiste confirmação e Outbox
+    BI-->>OS: pagamentoConfirmado
+  else falha ou recusa
+    MP-->>BI: falha ou situação recusada
+    BI-->>OS: pagamentoRecusado
+  end
+  opt pagamento confirmado
+    OS->>OS: habilita entrega da OS
+  end
+```
+
+O Billing consome os marcos da OS necessários ao domínio financeiro e produz `orcamentoGerado`, `orcamentoAprovado`, `orcamentoRecusado`, `pagamentoSolicitado`, `pagamentoConfirmado` e `pagamentoRecusado`. Os nomes e destinos normativos estão na [tabela canônica de mensageria](../oficina-platform/contracts/Contrato%20de%20T%C3%B3picos%20de%20Mensageria.md#tabela-can%C3%B4nica-de-roteamento), e a colaboração completa está na [visão transversal da plataforma](../oficina-platform/README.md#fluxos-operacionais).
+
 ## Setup local
 
 Pré-requisitos:
