@@ -253,6 +253,8 @@ Payments legados preservam a tradução `approved` para `CONFIRMADO`, estados te
 
 A integração atual com o Mercado Pago cobre PIX. Cartão exige tokenização ou dados de captura fora do contrato REST vigente e permanece como evolução posterior ou fluxo operacional manual.
 
+Temporariamente, `OFICINA_MERCADO_PAGO_WEBHOOK_RAW_DUMP_ENABLED=true` grava a primeira requisição do webhook sem serialização intermediária em `.oficina-diagnostics/mercado-pago-webhook-request.log`. O dump só pode ser ativado em `lab` ou `test`, preserva o body para o processamento normal e não é versionado.
+
 As tentativas de integração expõem as métricas `payment.provider.enabled`, `payment.provider.requests.count`, `payment.provider.request.duration`, `payment.provider.amount`, `payment.provider.failures.count` e `payment.provider.unavailable.count`, conforme o [Padrão de Observabilidade Distribuída](../oficina-platform/docs/observability/observability.md). Os desfechos ficam limitados a `confirmed`, `rejected`, `pending`, `failure` e `not_integrated`; status desconhecidos do provedor são agregados como `other`. Falhas usam somente as categorias `configuration`, `timeout`, `communication`, `provider_http_error`, `invalid_response`, `unsupported_method` e `business_rejection`. IDs de pagamento, ordem de serviço ou transação, CPF, e-mail e `correlationId` não são usados como dimensões.
 
 ## Contratos
